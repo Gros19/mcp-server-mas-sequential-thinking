@@ -9,25 +9,29 @@ authors = [
     { name = "Alain Ivars", email = "alainivars@gmail.com" },
 ]
 dependencies = [
-    "agno>=2.0.5",
+    "agno>=2.2.12",
     "asyncio",
-    "exa-py",
-    "python-dotenv",
-    "mcp",
-    "groq",
-    "ollama",
+    "exa-py>=2.0.0",
+    "python-dotenv>=1.2.1",
+    "mcp>=1.21.1",
+    "groq>=0.34.1",
+    "ollama>=0.6.1",
     "openrouter",
     "httpx[socks]>=0.28.1",
-    "sqlalchemy",
+    "sqlalchemy>=2.0.44",
+    "anthropic>=0.72.1",
+    "fastapi>=0.121.2",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "black",
-    "isort",
-    "mypy",
-    "ruff",
+    "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
+    "pytest-asyncio>=1.3.0",
+    "black>=25.11.0",
+    "isort>=7.0.0",
+    "mypy>=1.18.2",
+    "ruff>=0.14.5",
 ]
 
 [project.scripts]
