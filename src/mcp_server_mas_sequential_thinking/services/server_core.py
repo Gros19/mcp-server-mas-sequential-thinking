@@ -358,13 +358,6 @@ class ThoughtProcessor:
         Args:
             session: The session memory instance for accessing team and context
         """
-        import time
-
-        from mcp_server_mas_sequential_thinking.config import ProcessingDefaults
-        from mcp_server_mas_sequential_thinking.core import (
-            ProcessingMetadata,
-            ThoughtProcessingError,
-        )
         from mcp_server_mas_sequential_thinking.infrastructure import MetricsLogger
 
         from .context_builder import ContextBuilder
