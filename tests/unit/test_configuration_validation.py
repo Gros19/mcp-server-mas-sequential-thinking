@@ -27,9 +27,12 @@ class TestConfigurationValidation:
         """Test that valid GitHub token formats are accepted."""
         # Use tokens with sufficient entropy (varied characters) and correct lengths
         valid_tokens = [
-            "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789",  # Classic PAT (40 chars total: ghp_ + 36)
-            "github_pat_" + "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890123456789012345678901234567890",  # Fine-grained PAT (93+ chars)
-            "gho_" + "abcdefghijklmnopqrstuvwxyz0123456789",  # OAuth token (40 chars total: gho_ + 36)
+            "ghp_"
+            + "abcdefghijklmnopqrstuvwxyz0123456789",  # Classic PAT (40 chars total: ghp_ + 36)
+            "github_pat_"
+            + "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890123456789012345678901234567890",  # Fine-grained PAT (93+ chars)
+            "gho_"
+            + "abcdefghijklmnopqrstuvwxyz0123456789",  # OAuth token (40 chars total: gho_ + 36)
         ]
 
         for token in valid_tokens:
