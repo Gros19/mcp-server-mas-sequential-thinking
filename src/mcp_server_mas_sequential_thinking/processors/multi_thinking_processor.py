@@ -29,8 +29,6 @@ from .multi_thinking_core import (
     ThinkingDirection,
 )
 
-# logger already defined above
-
 # Message History Configuration (Agno 2.2.12+ optimization)
 # Defines optimal context window size for each thinking direction to reduce token usage
 MESSAGE_HISTORY_CONFIG = {

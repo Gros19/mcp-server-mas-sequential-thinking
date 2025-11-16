@@ -24,8 +24,6 @@ from mcp_server_mas_sequential_thinking.processors.multi_thinking_core import (
     ThinkingDirection,
 )
 
-# logger already defined above
-
 
 @dataclass
 class ThinkingSequenceStrategy:
