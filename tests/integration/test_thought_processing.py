@@ -4,13 +4,16 @@ Tests the complete thought processing pipeline including validation,
 routing, and response generation.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from mcp_server_mas_sequential_thinking.core.models import ThoughtData
 from mcp_server_mas_sequential_thinking.core.session import SessionMemory
-from mcp_server_mas_sequential_thinking.services.thought_processor_refactored import ThoughtProcessor
-from tests.fixtures.test_data import VALID_THOUGHTS, SAMPLE_API_KEYS
+from mcp_server_mas_sequential_thinking.services.thought_processor_refactored import (
+    ThoughtProcessor,
+)
+from tests.fixtures.test_data import SAMPLE_API_KEYS, VALID_THOUGHTS
 
 
 class TestThoughtProcessingIntegration:
@@ -24,7 +27,9 @@ class TestThoughtProcessingIntegration:
     async def test_complete_thought_processing_workflow(self):
         """Test the complete workflow from thought input to response."""
         # Mock the workflow router to avoid actual AI calls
-        with patch('mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter') as mock_router:
+        with patch(
+            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
+        ) as mock_router:
             # Set up mock response
             mock_result = MagicMock()
             mock_result.content = "This is a comprehensive analysis of the problem."
@@ -66,7 +71,9 @@ class TestThoughtProcessingIntegration:
     @pytest.mark.asyncio
     async def test_session_memory_integration(self):
         """Test that thoughts are properly stored in session memory."""
-        with patch('mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter') as mock_router:
+        with patch(
+            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
+        ) as mock_router:
             # Set up mock response
             mock_result = MagicMock()
             mock_result.content = "Analysis complete."
@@ -106,7 +113,9 @@ class TestThoughtProcessingIntegration:
     @pytest.mark.asyncio
     async def test_context_building_integration(self):
         """Test that context is properly built from session history."""
-        with patch('mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter') as mock_router:
+        with patch(
+            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
+        ) as mock_router:
             mock_result = MagicMock()
             mock_result.content = "Context-aware response."
             mock_result.strategy_used = "multi_agent"
@@ -145,7 +154,7 @@ class TestThoughtProcessingIntegration:
                 needsMoreThoughts=False,
             )
 
-            result = await processor.process_thought(followup_thought)
+            await processor.process_thought(followup_thought)
 
             # Verify that context was passed to the workflow
             call_args = mock_router_instance.process_thought_workflow.call_args
@@ -153,15 +162,21 @@ class TestThoughtProcessingIntegration:
             input_prompt_arg = call_args[0][1]
 
             assert thought_data_arg.thoughtNumber == 2
-            assert "fundamentals" in input_prompt_arg  # Context should include previous thought
+            assert (
+                "fundamentals" in input_prompt_arg
+            )  # Context should include previous thought
 
     @pytest.mark.asyncio
     async def test_error_handling_integration(self):
         """Test error handling throughout the processing pipeline."""
-        with patch('mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter') as mock_router:
+        with patch(
+            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
+        ) as mock_router:
             # Set up router to raise an exception
             mock_router_instance = mock_router.return_value
-            mock_router_instance.process_thought_workflow.side_effect = Exception("AI service unavailable")
+            mock_router_instance.process_thought_workflow.side_effect = Exception(
+                "AI service unavailable"
+            )
 
             processor = ThoughtProcessor(self.session)
 
@@ -178,13 +193,16 @@ class TestThoughtProcessingIntegration:
 
             # Should raise ThoughtProcessingError
             from mcp_server_mas_sequential_thinking.core import ThoughtProcessingError
+
             with pytest.raises(ThoughtProcessingError):
                 await processor.process_thought(thought_data)
 
     @pytest.mark.asyncio
     async def test_branching_workflow_integration(self):
         """Test branching workflow integration."""
-        with patch('mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter') as mock_router:
+        with patch(
+            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
+        ) as mock_router:
             mock_result = MagicMock()
             mock_result.content = "Branch analysis complete."
             mock_result.strategy_used = "multi_agent"
@@ -234,19 +252,32 @@ class TestThoughtProcessingIntegration:
 class TestConfigurationIntegration:
     """Integration tests for configuration and environment setup."""
 
-    @patch.dict('os.environ', {'LLM_PROVIDER': 'deepseek', 'DEEPSEEK_API_KEY': SAMPLE_API_KEYS['valid']['deepseek']})
+    @patch.dict(
+        "os.environ",
+        {
+            "LLM_PROVIDER": "deepseek",
+            "DEEPSEEK_API_KEY": SAMPLE_API_KEYS["valid"]["deepseek"],
+        },
+    )
     def test_valid_environment_configuration(self):
         """Test that valid environment configuration works end-to-end."""
-        from mcp_server_mas_sequential_thinking.config import validate_configuration_comprehensive
+        from mcp_server_mas_sequential_thinking.config import (
+            validate_configuration_comprehensive,
+        )
 
         result = validate_configuration_comprehensive()
         # Should not have any validation errors for required keys
-        assert "DEEPSEEK_API_KEY" not in result or "Required but not set" not in result.get("DEEPSEEK_API_KEY", "")
+        assert (
+            "DEEPSEEK_API_KEY" not in result
+            or "Required but not set" not in result.get("DEEPSEEK_API_KEY", "")
+        )
 
-    @patch.dict('os.environ', {}, clear=True)
+    @patch.dict("os.environ", {}, clear=True)
     def test_missing_configuration_detection(self):
         """Test that missing configuration is properly detected."""
-        from mcp_server_mas_sequential_thinking.config import validate_configuration_comprehensive
+        from mcp_server_mas_sequential_thinking.config import (
+            validate_configuration_comprehensive,
+        )
 
         result = validate_configuration_comprehensive("deepseek")
         assert "DEEPSEEK_API_KEY" in result

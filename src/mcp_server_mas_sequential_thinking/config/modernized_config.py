@@ -343,7 +343,7 @@ class ConfigurationManager:
                 continue
 
             # Validate API key format if present
-            if env_value and "API_KEY" in var_name or "TOKEN" in var_name:
+            if (env_value and "API_KEY" in var_name) or "TOKEN" in var_name:
                 try:
                     self._validate_api_key_format(var_name, env_value)
                 except ValueError as e:
@@ -356,6 +356,7 @@ class ConfigurationManager:
         exa_key = os.environ.get("EXA_API_KEY", "").strip()
         if not exa_key:
             import logging
+
             logging.getLogger(__name__).warning(
                 "EXA_API_KEY not found. Research tools will be disabled."
             )
@@ -376,8 +377,18 @@ class ConfigurationManager:
 
         # Basic validation - check for obvious test/placeholder values
         test_patterns = [
-            "test", "demo", "example", "placeholder", "your_key", "your_token",
-            "api_key_here", "insert_key", "replace_me", "xxx", "yyy", "zzz"
+            "test",
+            "demo",
+            "example",
+            "placeholder",
+            "your_key",
+            "your_token",
+            "api_key_here",
+            "insert_key",
+            "replace_me",
+            "xxx",
+            "yyy",
+            "zzz",
         ]
 
         for pattern in test_patterns:
@@ -394,7 +405,8 @@ class ConfigurationManager:
 
         # Character validation - API keys should be alphanumeric with some special chars
         import re
-        if not re.match(r'^[a-zA-Z0-9._-]+$', key_value):
+
+        if not re.match(r"^[a-zA-Z0-9._-]+$", key_value):
             raise ValueError(
                 f"{key_name} contains invalid characters. API keys should only contain letters, numbers, dots, hyphens, and underscores."
             )
@@ -463,7 +475,9 @@ def check_required_api_keys(provider_name: str | None = None) -> list[str]:
     return list(validation_result.keys())
 
 
-def validate_configuration_comprehensive(provider_name: str | None = None) -> dict[str, str]:
+def validate_configuration_comprehensive(
+    provider_name: str | None = None,
+) -> dict[str, str]:
     """Perform comprehensive configuration validation and return detailed error information."""
     return _config_manager.validate_environment(provider_name)
 

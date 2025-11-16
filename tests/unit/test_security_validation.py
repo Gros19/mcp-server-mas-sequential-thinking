@@ -6,8 +6,11 @@ against prompt injection and other security vulnerabilities.
 
 import pytest
 
-from mcp_server_mas_sequential_thinking.main import sanitize_and_validate_input, _calculate_shannon_entropy
 from mcp_server_mas_sequential_thinking.config.constants import SecurityConstants
+from mcp_server_mas_sequential_thinking.main import (
+    _calculate_shannon_entropy,
+    sanitize_and_validate_input,
+)
 
 
 class TestSecurityValidation:

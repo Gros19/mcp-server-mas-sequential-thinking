@@ -5,8 +5,9 @@ validation and environment configuration.
 """
 
 import os
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from mcp_server_mas_sequential_thinking.config.modernized_config import (
     ConfigurationManager,
@@ -79,7 +80,9 @@ class TestConfigurationValidation:
 
         for placeholder in placeholder_keys:
             with pytest.raises(ValueError, match="placeholder"):
-                self.config_manager._validate_api_key_format("TEST_API_KEY", placeholder)
+                self.config_manager._validate_api_key_format(
+                    "TEST_API_KEY", placeholder
+                )
 
     def test_key_length_validation(self):
         """Test that API keys meet minimum length requirements."""
@@ -91,7 +94,9 @@ class TestConfigurationValidation:
         """Test that API keys contain only allowed characters."""
         invalid_chars_key = "sk-valid_key_with@#$%invalid_chars"
         with pytest.raises(ValueError, match="invalid characters"):
-            self.config_manager._validate_api_key_format("TEST_API_KEY", invalid_chars_key)
+            self.config_manager._validate_api_key_format(
+                "TEST_API_KEY", invalid_chars_key
+            )
 
     @patch.dict(os.environ, {}, clear=True)
     def test_missing_required_keys(self):
@@ -106,12 +111,22 @@ class TestConfigurationValidation:
         """Test that valid configuration passes validation."""
         result = validate_configuration_comprehensive("deepseek")
         # Should not include DEEPSEEK_API_KEY in errors if valid
-        assert "DEEPSEEK_API_KEY" not in result or "Required but not set" not in result.get("DEEPSEEK_API_KEY", "")
+        assert (
+            "DEEPSEEK_API_KEY" not in result
+            or "Required but not set" not in result.get("DEEPSEEK_API_KEY", "")
+        )
 
     def test_get_available_providers(self):
         """Test that available providers are returned correctly."""
         providers = self.config_manager.get_available_providers()
-        expected_providers = ["deepseek", "groq", "openrouter", "ollama", "github", "anthropic"]
+        expected_providers = [
+            "deepseek",
+            "groq",
+            "openrouter",
+            "ollama",
+            "github",
+            "anthropic",
+        ]
 
         for provider in expected_providers:
             assert provider in providers

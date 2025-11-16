@@ -115,7 +115,9 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
             agent = self._get_agent()
 
             # Secure prompt construction - sanitize thought input
-            sanitized_thought = self._sanitize_thought_for_analysis(thought_data.thought)
+            sanitized_thought = self._sanitize_thought_for_analysis(
+                thought_data.thought
+            )
             prompt = COMPLEXITY_ANALYSIS_PROMPT.format(thought=sanitized_thought)
 
             # Get AI analysis with timeout
@@ -127,14 +129,30 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
 
             # Create metrics object with validated AI assessment
             metrics = ComplexityMetrics(
-                complexity_score=self._validate_numeric_field(complexity_data.get("complexity_score"), 0.0, 100.0, 0.0),
-                word_count=self._validate_numeric_field(complexity_data.get("word_count"), 0, 10000, 0),
-                sentence_count=self._validate_numeric_field(complexity_data.get("sentence_count"), 0, 1000, 0),
-                question_count=self._validate_numeric_field(complexity_data.get("question_count"), 0, 100, 0),
-                technical_terms=self._validate_numeric_field(complexity_data.get("technical_terms"), 0, 100, 0),
-                branching_references=self._validate_numeric_field(complexity_data.get("branching_references"), 0, 50, 0),
-                research_indicators=self._validate_numeric_field(complexity_data.get("research_indicators"), 0, 50, 0),
-                analysis_depth=self._validate_numeric_field(complexity_data.get("analysis_depth"), 0, 100, 0),
+                complexity_score=self._validate_numeric_field(
+                    complexity_data.get("complexity_score"), 0.0, 100.0, 0.0
+                ),
+                word_count=self._validate_numeric_field(
+                    complexity_data.get("word_count"), 0, 10000, 0
+                ),
+                sentence_count=self._validate_numeric_field(
+                    complexity_data.get("sentence_count"), 0, 1000, 0
+                ),
+                question_count=self._validate_numeric_field(
+                    complexity_data.get("question_count"), 0, 100, 0
+                ),
+                technical_terms=self._validate_numeric_field(
+                    complexity_data.get("technical_terms"), 0, 100, 0
+                ),
+                branching_references=self._validate_numeric_field(
+                    complexity_data.get("branching_references"), 0, 50, 0
+                ),
+                research_indicators=self._validate_numeric_field(
+                    complexity_data.get("research_indicators"), 0, 50, 0
+                ),
+                analysis_depth=self._validate_numeric_field(
+                    complexity_data.get("analysis_depth"), 0, 100, 0
+                ),
                 philosophical_depth_boost=self._validate_numeric_field(
                     complexity_data.get("philosophical_depth_boost"), 0, 15, 0
                 ),
@@ -146,13 +164,13 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
                     complexity_data.get("thinking_modes_needed", ["SYNTHESIS"])
                 ),
                 analyzer_type="ai",
-                reasoning=self._sanitize_reasoning(complexity_data.get("reasoning", "AI analysis")),
+                reasoning=self._sanitize_reasoning(
+                    complexity_data.get("reasoning", "AI analysis")
+                ),
             )
 
             logger.info(f"  🎯 AI Complexity Score: {metrics.complexity_score:.1f}/100")
-            logger.info(
-                f"  💭 Reasoning: {metrics.reasoning[:100]}..."
-            )
+            logger.info(f"  💭 Reasoning: {metrics.reasoning[:100]}...")
 
             return metrics
 
@@ -174,7 +192,9 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
         # Remove any potential prompt injection patterns
         sanitized = thought.replace('"', '\\"')  # Escape quotes
         sanitized = re.sub(r"[{}]", "", sanitized)  # Remove curly braces
-        sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", sanitized)  # Remove control chars
+        sanitized = re.sub(
+            r"[\x00-\x1f\x7f-\x9f]", "", sanitized
+        )  # Remove control chars
 
         # Limit length to prevent token exhaustion
         if len(sanitized) > 2000:
@@ -240,7 +260,9 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
 
         return data
 
-    def _validate_numeric_field(self, value: Any, min_val: float, max_val: float, default: float) -> float:
+    def _validate_numeric_field(
+        self, value: Any, min_val: float, max_val: float, default: float
+    ) -> float:
         """Validate and clamp numeric fields to safe ranges."""
         try:
             if value is None:
@@ -254,9 +276,16 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
     def _validate_problem_type(self, problem_type: str) -> str:
         """Validate problem type against allowed values."""
         allowed_types = {
-            "FACTUAL", "EMOTIONAL", "CRITICAL", "OPTIMISTIC",
-            "CREATIVE", "SYNTHESIS", "EVALUATIVE", "PHILOSOPHICAL",
-            "DECISION", "GENERAL"
+            "FACTUAL",
+            "EMOTIONAL",
+            "CRITICAL",
+            "OPTIMISTIC",
+            "CREATIVE",
+            "SYNTHESIS",
+            "EVALUATIVE",
+            "PHILOSOPHICAL",
+            "DECISION",
+            "GENERAL",
         }
 
         if not isinstance(problem_type, str):
@@ -268,8 +297,12 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
     def _validate_thinking_modes(self, modes: Any) -> list[str]:
         """Validate thinking modes list."""
         allowed_modes = {
-            "FACTUAL", "EMOTIONAL", "CRITICAL", "OPTIMISTIC",
-            "CREATIVE", "SYNTHESIS"
+            "FACTUAL",
+            "EMOTIONAL",
+            "CRITICAL",
+            "OPTIMISTIC",
+            "CREATIVE",
+            "SYNTHESIS",
         }
 
         if not isinstance(modes, list):

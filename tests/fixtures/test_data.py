@@ -4,7 +4,6 @@ Provides reusable test data and fixtures for unit and integration tests.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List
 
 
 @dataclass
@@ -22,7 +21,7 @@ class SampleThoughtData:
 
 
 # Valid sample thoughts for testing
-VALID_THOUGHTS: List[SampleThoughtData] = [
+VALID_THOUGHTS: list[SampleThoughtData] = [
     SampleThoughtData(
         thought="How can I improve my problem-solving skills?",
         thoughtNumber=1,
@@ -56,7 +55,7 @@ VALID_THOUGHTS: List[SampleThoughtData] = [
 ]
 
 # Invalid thoughts for testing validation
-INVALID_THOUGHTS: List[Dict] = [
+INVALID_THOUGHTS: list[dict] = [
     {
         "thought": "",  # Empty thought
         "thoughtNumber": 1,

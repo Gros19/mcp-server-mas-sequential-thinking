@@ -18,7 +18,7 @@ logger = setup_logging()
 class RateLimitExceeded(Exception):
     """Exception raised when rate limit is exceeded."""
 
-    def __init__(self, limit_type: str, retry_after: float):
+    def __init__(self, limit_type: str, retry_after: float) -> None:
         self.limit_type = limit_type
         self.retry_after = retry_after
         super().__init__(
@@ -50,7 +50,7 @@ class RateLimitConfig:
 class TokenBucket:
     """Token bucket implementation for rate limiting."""
 
-    def __init__(self, capacity: int, refill_rate: float):
+    def __init__(self, capacity: int, refill_rate: float) -> None:
         """Initialize token bucket.
 
         Args:
@@ -112,7 +112,7 @@ class TokenBucket:
 class SlidingWindowCounter:
     """Sliding window counter for accurate request tracking."""
 
-    def __init__(self, window_seconds: int):
+    def __init__(self, window_seconds: int) -> None:
         """Initialize sliding window counter.
 
         Args:
@@ -165,7 +165,7 @@ class RateLimiter:
     _client_buckets: ClassVar[dict] = defaultdict(lambda: None)
     _cleanup_task: ClassVar[asyncio.Task | None] = None
 
-    def __init__(self, config: RateLimitConfig | None = None):
+    def __init__(self, config: RateLimitConfig | None = None) -> None:
         """Initialize rate limiter.
 
         Args:
@@ -213,7 +213,9 @@ class RateLimiter:
         # Start cleanup task on first request (lazy initialization)
         if RateLimiter._cleanup_task is None:
             try:
-                RateLimiter._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+                RateLimiter._cleanup_task = asyncio.create_task(
+                    self._periodic_cleanup()
+                )
                 logger.debug("Started rate limiter cleanup task")
             except RuntimeError:
                 # If no event loop is running, that's okay - we'll try again next time
@@ -230,7 +232,9 @@ class RateLimiter:
         # Check per-minute limit
         minute_count = await RateLimiter._global_minute_counter.get_count()
         if minute_count >= self.config.max_requests_per_minute:
-            oldest_age = await RateLimiter._global_minute_counter.get_oldest_request_age()
+            oldest_age = (
+                await RateLimiter._global_minute_counter.get_oldest_request_age()
+            )
             wait_time = max(0.0, 60.0 - oldest_age)
             raise RateLimitExceeded("per_minute", wait_time)
 
@@ -309,7 +313,7 @@ class RateLimiter:
                 logger.info("Rate limiter cleanup task cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in rate limiter cleanup: {e}")
+                logger.exception(f"Error in rate limiter cleanup: {e}")
 
     @classmethod
     def get_current_stats(cls) -> dict:

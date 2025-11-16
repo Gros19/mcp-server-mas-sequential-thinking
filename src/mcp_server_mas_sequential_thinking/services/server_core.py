@@ -15,7 +15,6 @@ from mcp_server_mas_sequential_thinking.config import (
     DefaultTimeouts,
     DefaultValues,
     PerformanceMetrics,
-    check_required_api_keys,
 )
 from mcp_server_mas_sequential_thinking.core import (
     ConfigurationError,
@@ -141,8 +140,8 @@ class EnvironmentInitializer(ServerInitializer):
         try:
             # Import here to avoid circular dependency
             from mcp_server_mas_sequential_thinking.config.modernized_config import (
-                get_model_config,
                 get_available_providers,
+                get_model_config,
             )
 
             # Check if provider is supported
@@ -176,14 +175,7 @@ class EnvironmentInitializer(ServerInitializer):
 
     async def _validate_system_requirements(self) -> None:
         """Validate system-level requirements."""
-        import sys
-
         # Python version check
-        if sys.version_info < (3, 10):
-            raise ConfigurationError(
-                f"Python 3.10+ required, but found {sys.version_info.major}.{sys.version_info.minor}. "
-                "Please upgrade Python or use a compatible environment."
-            )
 
         # Check required packages are available
         required_packages = [
@@ -198,8 +190,10 @@ class EnvironmentInitializer(ServerInitializer):
                 __import__(package_name)
                 if min_version and package_name == "agno":
                     import agno
+
                     if hasattr(agno, "__version__"):
                         from packaging import version
+
                         if version.parse(agno.__version__) < version.parse(min_version):
                             raise ConfigurationError(
                                 f"Agno {min_version}+ required, but found {agno.__version__}. "
@@ -279,7 +273,9 @@ class EnvironmentInitializer(ServerInitializer):
             ),
         }
 
-        return help_text.get(provider, f"Please check documentation for '{provider}' provider setup.")
+        return help_text.get(
+            provider, f"Please check documentation for '{provider}' provider setup."
+        )
 
     async def cleanup(self) -> None:
         """No cleanup needed for environment."""

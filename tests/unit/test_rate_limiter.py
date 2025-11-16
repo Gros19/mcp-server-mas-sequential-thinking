@@ -5,14 +5,15 @@ against resource exhaustion and denial of service attacks.
 """
 
 import asyncio
+
 import pytest
 
 from mcp_server_mas_sequential_thinking.security.rate_limiter import (
+    RateLimitConfig,
     RateLimiter,
     RateLimitExceeded,
-    TokenBucket,
     SlidingWindowCounter,
-    RateLimitConfig,
+    TokenBucket,
 )
 
 
@@ -75,6 +76,7 @@ class TestTokenBucket:
 
         # Wait a long time
         import time
+
         time.sleep(0.1)
 
         # Refill should not exceed capacity
@@ -155,7 +157,7 @@ class TestRateLimiter:
         await RateLimiter.reset_limits()
 
         # Should allow requests within limit
-        for i in range(5):
+        for _i in range(5):
             await limiter.check_rate_limit("test_client")
             await limiter.release_concurrent_slot()
 
@@ -166,7 +168,7 @@ class TestRateLimiter:
         await RateLimiter.reset_limits()
 
         # Fill up concurrent slots
-        for i in range(self.config.max_concurrent_requests):
+        for _i in range(self.config.max_concurrent_requests):
             await limiter.check_rate_limit("test_client")
 
         # Next request should fail
@@ -187,7 +189,7 @@ class TestRateLimiter:
         await RateLimiter.reset_limits()
 
         # Make requests up to the limit
-        for i in range(self.config.max_requests_per_minute):
+        for _i in range(self.config.max_requests_per_minute):
             await limiter.check_rate_limit("test_client")
             await limiter.release_concurrent_slot()
 
@@ -205,7 +207,7 @@ class TestRateLimiter:
         burst_size = int(self.config.max_requests_per_minute * 1.5)
 
         successful_requests = 0
-        for i in range(burst_size):
+        for _i in range(burst_size):
             try:
                 await limiter.check_rate_limit("test_client")
                 await limiter.release_concurrent_slot()
@@ -266,7 +268,7 @@ class TestRateLimiter:
         limiter = RateLimiter(self.config)
 
         # Make some requests
-        for i in range(5):
+        for _i in range(5):
             await limiter.check_rate_limit("test_client")
             await limiter.release_concurrent_slot()
 
@@ -308,7 +310,7 @@ class TestRateLimitEdgeCases:
         limiter._initialize_global_limiters()
 
         # Should allow many requests
-        for i in range(50):
+        for _i in range(50):
             await limiter.check_rate_limit("test_client")
             await limiter.release_concurrent_slot()
 
