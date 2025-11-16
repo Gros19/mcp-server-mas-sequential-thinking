@@ -119,18 +119,3 @@ class ContextBuilder:
             pass
 
         logger.info("  %s", "=" * separator_length)
-
-    def create_simplified_prompt(self, input_prompt: str) -> str:
-        """Create a simplified prompt for single-agent processing.
-
-        Args:
-            input_prompt: The original input prompt
-
-        Returns:
-            Simplified prompt optimized for single-agent processing
-        """
-        return f"""Process this thought efficiently:
-
-{input_prompt}
-
-Provide a focused response with clear guidance for the next step."""
