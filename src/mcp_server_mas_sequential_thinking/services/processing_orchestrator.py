@@ -49,13 +49,6 @@ class ProcessingOrchestrator:
         self._response_processor = response_processor
         self._retry_handler = retry_handler
 
-        # Initialize performance tracking
-        from mcp_server_mas_sequential_thinking.infrastructure import (
-            MetricsLogger,
-        )
-
-        self._metrics_logger = MetricsLogger()
-
     async def execute_single_agent_processing(
         self, input_prompt: str, simplified: bool = False
     ) -> str:
@@ -131,8 +124,8 @@ class ProcessingOrchestrator:
             Processed response content
         """
         team_info = self._get_team_info()
-        self._metrics_logger.log_team_details(team_info)
-        self._metrics_logger.log_input_details(input_prompt)
+        logger.info(f"Team processing: {team_info}")
+        self._log_input_details(input_prompt)
 
         async def team_operation():
             start_time = time.time()
@@ -143,7 +136,7 @@ class ProcessingOrchestrator:
                 response, processing_time, "MULTI-AGENT TEAM"
             )
 
-            self._performance_tracker.record_processing(processing_time, True)
+            logger.info(f"Team processing completed in {processing_time:.3f}s")
             return processed_response.content
 
         return await self._retry_handler.execute_team_processing(
