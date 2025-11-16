@@ -1,7 +1,9 @@
 """Refactored MCP Sequential Thinking Server with separated concerns and reduced complexity."""
 
 import asyncio
+import math
 import sys
+from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from html import escape
@@ -28,6 +30,7 @@ from .utils import setup_logging
 load_dotenv()
 logger = setup_logging()
 
+
 # Application state container for dependency injection
 class ApplicationContainer:
     """Dependency injection container for application state."""
@@ -45,7 +48,9 @@ class ApplicationContainer:
 
         async with self._processor_lock:
             if self.thought_processor is None:
-                logger.info("Initializing ThoughtProcessor with Multi-Thinking workflow")
+                logger.info(
+                    "Initializing ThoughtProcessor with Multi-Thinking workflow"
+                )
                 self.thought_processor = ThoughtProcessor(self.server_state.session)
             return self.thought_processor
 
@@ -53,6 +58,7 @@ class ApplicationContainer:
         """Clean up application state."""
         self.server_state = None
         self.thought_processor = None
+
 
 # Application container instance
 _app_container = ApplicationContainer()
@@ -122,7 +128,14 @@ def sanitize_and_validate_input(text: str, max_length: int, field_name: str) -> 
             )
 
     # Multiple bracket/parentheses check
-    bracket_count = text.count("(") + text.count(")") + text.count("[") + text.count("]") + text.count("{") + text.count("}")
+    bracket_count = (
+        text.count("(")
+        + text.count(")")
+        + text.count("[")
+        + text.count("]")
+        + text.count("{")
+        + text.count("}")
+    )
     if bracket_count > 20:  # Reasonable threshold for normal text
         raise ValueError(
             f"Excessive brackets/parentheses detected in {field_name} ({bracket_count} found). "
@@ -263,7 +276,9 @@ async def sequentialthinking(
             f"• Consider reducing request frequency\n"
             f"• Break complex tasks into smaller chunks"
         )
-        logger.warning(f"Rate limit exceeded for thought #{thoughtNumber}: {e.limit_type}")
+        logger.warning(
+            f"Rate limit exceeded for thought #{thoughtNumber}: {e.limit_type}"
+        )
         return error_msg
     except ValueError as e:
         # Request size validation error
@@ -274,7 +289,9 @@ async def sequentialthinking(
             f"• Split into multiple sequential thoughts\n"
             f"• Remove unnecessary details or formatting"
         )
-        logger.warning(f"Request size validation failed for thought #{thoughtNumber}: {e}")
+        logger.warning(
+            f"Request size validation failed for thought #{thoughtNumber}: {e}"
+        )
         return error_msg
 
     try:
@@ -385,9 +402,10 @@ def run() -> None:
     """Run the MCP server with enhanced error handling and graceful shutdown."""
     try:
         config = ServerConfig.from_environment()
-        logger.info(f"Starting Sequential Thinking Server with {config.provider} provider")
-    except Exception as e:
-        print(_format_startup_error(e))
+        logger.info(
+            f"Starting Sequential Thinking Server with {config.provider} provider"
+        )
+    except Exception:
         sys.exit(ProcessingDefaults.EXIT_CODE_ERROR)
 
     try:
@@ -403,8 +421,7 @@ def run() -> None:
 
     except Exception as e:
         error_msg = _format_server_runtime_error(e)
-        logger.error(error_msg)
-        print(error_msg)
+        logger.exception(error_msg)
         sys.exit(ProcessingDefaults.EXIT_CODE_ERROR)
 
     finally:
@@ -500,14 +517,12 @@ def main() -> None:
     try:
         run()
     except KeyboardInterrupt:
-        print("\n👋 Server stopped by user. Goodbye!")
         sys.exit(0)
     except SystemExit:
         # Re-raise SystemExit without additional handling
         raise
     except Exception as e:
-        error_msg = _format_startup_error(e)
-        print(error_msg)
+        _format_startup_error(e)
         try:
             logger.critical(f"Fatal error in main: {e}", exc_info=True)
         except:
