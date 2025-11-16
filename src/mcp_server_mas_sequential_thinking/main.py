@@ -525,7 +525,7 @@ def main() -> None:
         _format_startup_error(e)
         try:
             logger.critical(f"Fatal error in main: {e}", exc_info=True)
-        except:
+        except Exception:
             # If logging fails, still show the error
             pass
         sys.exit(ProcessingDefaults.EXIT_CODE_ERROR)
