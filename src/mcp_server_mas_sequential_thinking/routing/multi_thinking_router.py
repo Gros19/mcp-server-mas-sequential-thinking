@@ -1,10 +1,10 @@
 """Multi-Thinking Intelligent Router.
 
-基于问题复杂度和类型的智能路由系统，支持：
-- 单向模式：简单问题快速处理
-- 双向序列：中等问题平衡处理
-- 三向核心：标准问题深度处理
-- 完整多向：复杂问题全面处理
+Intelligent routing system based on question complexity and type, supporting:
+- Single direction mode: Fast processing for simple questions
+- Double sequence: Balanced processing for moderate questions
+- Triple core: Deep processing for standard questions
+- Full multi-directional: Comprehensive processing for complex questions
 """
 
 # Lazy import to break circular dependency
@@ -29,7 +29,7 @@ from mcp_server_mas_sequential_thinking.processors.multi_thinking_core import (
 
 @dataclass
 class ThinkingSequenceStrategy:
-    """思维序列策略."""
+    """Thinking sequence strategy."""
 
     name: str
     complexity: ProcessingDepth
@@ -39,59 +39,59 @@ class ThinkingSequenceStrategy:
 
 
 class ThinkingSequenceLibrary:
-    """思维序列策略库."""
+    """Thinking sequence strategy library."""
 
-    # 预定义的思维序列策略
+    # Predefined thinking sequence strategies
     STRATEGIES = {
-        # 单向模式策略
+        # Single direction mode strategies
         "single_factual": ThinkingSequenceStrategy(
-            name="单向事实模式",
+            name="Single Factual Mode",
             complexity=ProcessingDepth.SINGLE,
             thinking_sequence=[ThinkingDirection.FACTUAL],
             estimated_time_seconds=120,
-            description="纯事实收集，快速信息处理",
+            description="Pure fact collection, fast information processing",
         ),
         "single_intuitive": ThinkingSequenceStrategy(
-            name="单向直觉模式",
+            name="Single Intuitive Mode",
             complexity=ProcessingDepth.SINGLE,
             thinking_sequence=[ThinkingDirection.EMOTIONAL],
             estimated_time_seconds=30,
-            description="快速直觉反应，30秒情感判断",
+            description="Quick intuitive response, 30-second emotional judgment",
         ),
         "single_creative": ThinkingSequenceStrategy(
-            name="单向创意模式",
+            name="Single Creative Mode",
             complexity=ProcessingDepth.SINGLE,
             thinking_sequence=[ThinkingDirection.CREATIVE],
             estimated_time_seconds=240,
-            description="创意生成模式，自由创新思考",
+            description="Creative generation mode, free innovative thinking",
         ),
         "single_critical": ThinkingSequenceStrategy(
-            name="单向批判模式",
+            name="Single Critical Mode",
             complexity=ProcessingDepth.SINGLE,
             thinking_sequence=[ThinkingDirection.CRITICAL],
             estimated_time_seconds=120,
-            description="风险识别，快速批判分析",
+            description="Risk identification, fast critical analysis",
         ),
-        # 双向序列策略
+        # Double sequence strategies
         "evaluate_idea": ThinkingSequenceStrategy(
-            name="想法评估序列",
+            name="Idea Evaluation Sequence",
             complexity=ProcessingDepth.DOUBLE,
             thinking_sequence=[
                 ThinkingDirection.OPTIMISTIC,
                 ThinkingDirection.CRITICAL,
             ],
             estimated_time_seconds=240,
-            description="先看优点，再看风险，平衡评估",
+            description="First examine benefits, then risks, balanced evaluation",
         ),
         "improve_design": ThinkingSequenceStrategy(
-            name="设计改进序列",
+            name="Design Improvement Sequence",
             complexity=ProcessingDepth.DOUBLE,
             thinking_sequence=[ThinkingDirection.CRITICAL, ThinkingDirection.CREATIVE],
             estimated_time_seconds=360,
-            description="识别问题，然后创新改进",
+            description="Identify problems, then innovate improvements",
         ),
         "fact_and_judge": ThinkingSequenceStrategy(
-            name="事实判断序列",
+            name="Fact and Judgment Sequence",
             complexity=ProcessingDepth.TRIPLE,
             thinking_sequence=[
                 ThinkingDirection.FACTUAL,
@@ -99,11 +99,11 @@ class ThinkingSequenceLibrary:
                 ThinkingDirection.SYNTHESIS,
             ],
             estimated_time_seconds=360,
-            description="收集事实，批判验证，综合整合结论",
+            description="Collect facts, critical verification, comprehensive synthesis",
         ),
-        # 三向核心序列策略
+        # Triple core sequence strategies
         "problem_solving": ThinkingSequenceStrategy(
-            name="问题解决序列",
+            name="Problem Solving Sequence",
             complexity=ProcessingDepth.TRIPLE,
             thinking_sequence=[
                 ThinkingDirection.FACTUAL,
@@ -111,10 +111,10 @@ class ThinkingSequenceLibrary:
                 ThinkingDirection.CRITICAL,
             ],
             estimated_time_seconds=480,
-            description="事实→创意→评估，标准问题解决",
+            description="Facts→Creativity→Evaluation, standard problem solving",
         ),
         "decision_making": ThinkingSequenceStrategy(
-            name="决策制定序列",
+            name="Decision Making Sequence",
             complexity=ProcessingDepth.TRIPLE,
             thinking_sequence=[
                 ThinkingDirection.EMOTIONAL,
@@ -122,10 +122,10 @@ class ThinkingSequenceLibrary:
                 ThinkingDirection.CRITICAL,
             ],
             estimated_time_seconds=390,
-            description="直觉→价值→风险，快速决策",
+            description="Intuition→Value→Risk, rapid decision making",
         ),
         "philosophical_thinking": ThinkingSequenceStrategy(
-            name="哲学思考序列",
+            name="Philosophical Thinking Sequence",
             complexity=ProcessingDepth.TRIPLE,
             thinking_sequence=[
                 ThinkingDirection.FACTUAL,
@@ -133,11 +133,14 @@ class ThinkingSequenceLibrary:
                 ThinkingDirection.SYNTHESIS,
             ],
             estimated_time_seconds=540,
-            description="事实→创造→整合，深度哲学思考（解决综合+评审分离问题）",
+            description=(
+                "Facts→Creation→Integration, deep philosophical thinking "
+                "(resolves synthesis+review separation issue)"
+            ),
         ),
-        # 完整多向序列
+        # Full multi-directional sequence
         "full_exploration": ThinkingSequenceStrategy(
-            name="全面探索序列",
+            name="Full Exploration Sequence",
             complexity=ProcessingDepth.FULL,
             thinking_sequence=[
                 ThinkingDirection.SYNTHESIS,
@@ -149,10 +152,12 @@ class ThinkingSequenceLibrary:
                 ThinkingDirection.SYNTHESIS,
             ],
             estimated_time_seconds=780,
-            description="完整多向序列，全面深度分析",
+            description=(
+                "Complete multi-directional sequence, comprehensive deep analysis"
+            ),
         ),
         "creative_innovation": ThinkingSequenceStrategy(
-            name="创新发展序列",
+            name="Creative Innovation Sequence",
             complexity=ProcessingDepth.FULL,
             thinking_sequence=[
                 ThinkingDirection.SYNTHESIS,
@@ -164,20 +169,20 @@ class ThinkingSequenceLibrary:
                 ThinkingDirection.SYNTHESIS,
             ],
             estimated_time_seconds=840,
-            description="创新优先的完整流程",
+            description="Innovation-prioritized complete workflow",
         ),
     }
 
     @classmethod
     def get_strategy(cls, strategy_name: str) -> ThinkingSequenceStrategy | None:
-        """获取指定策略."""
+        """Get specified strategy."""
         return cls.STRATEGIES.get(strategy_name)
 
     @classmethod
     def get_strategies_by_complexity(
         cls, complexity: ProcessingDepth
     ) -> list[ThinkingSequenceStrategy]:
-        """按复杂度获取策略."""
+        """Get strategies by complexity level."""
         return [
             strategy
             for strategy in cls.STRATEGIES.values()
@@ -187,24 +192,24 @@ class ThinkingSequenceLibrary:
 
 @dataclass
 class RoutingDecision:
-    """路由决策结果."""
+    """Routing decision result."""
 
     strategy: ThinkingSequenceStrategy
     reasoning: str
     complexity_metrics: ComplexityMetrics
-    estimated_cost_reduction: float  # 相比原系统的成本降低百分比
+    estimated_cost_reduction: float  # Cost reduction vs original system
     problem_type: str  # AI-determined problem type
     thinking_modes_needed: list[str]  # AI-recommended thinking modes
 
 
 class MultiThinkingIntelligentRouter:
-    """多向思维智能路由器."""
+    """Multi-directional thinking intelligent router."""
 
     def __init__(self, complexity_analyzer: AIComplexityAnalyzer | None = None) -> None:
         self.complexity_analyzer = complexity_analyzer or AIComplexityAnalyzer()
         self.sequence_library = ThinkingSequenceLibrary()
 
-        # 复杂度阈值配置
+        # Complexity threshold configuration
         self.complexity_thresholds = {
             ProcessingDepth.SINGLE: (0, 3),
             ProcessingDepth.DOUBLE: (3, 10),
@@ -270,7 +275,7 @@ class MultiThinkingIntelligentRouter:
         return decision
 
     def _determine_complexity_level(self, score: float) -> ProcessingDepth:
-        """根据复杂度分数确定处理级别."""
+        """Determine processing level based on complexity score."""
         for level, (min_score, max_score) in self.complexity_thresholds.items():
             if min_score <= score < max_score:
                 return level
@@ -339,7 +344,7 @@ class MultiThinkingIntelligentRouter:
     def _get_fallback_strategy(
         self, complexity_level: ProcessingDepth
     ) -> ThinkingSequenceStrategy:
-        """获取降级策略."""
+        """Get fallback strategy."""
         fallback_map = {
             ProcessingDepth.SINGLE: "single_factual",
             ProcessingDepth.DOUBLE: "fact_and_judge",
@@ -361,7 +366,10 @@ class MultiThinkingIntelligentRouter:
             f"Strategy: {strategy.name}",
             f"AI Problem Type: {problem_type}",
             f"Complexity: {metrics.complexity_score:.1f}/100",
-            f"Thinking Sequence: {' → '.join(direction.value for direction in strategy.thinking_sequence)}",
+            (
+                f"Thinking Sequence: "
+                f"{' → '.join(direction.value for direction in strategy.thinking_sequence)}"
+            ),
             f"Estimated Time: {strategy.estimated_time_seconds}s",
             f"AI Recommended Modes: {', '.join(thinking_modes_needed)}",
         ]
@@ -379,37 +387,37 @@ class MultiThinkingIntelligentRouter:
     def _estimate_cost_reduction(
         self, strategy: ThinkingSequenceStrategy, complexity_score: float
     ) -> float:
-        """估算相比原系统的成本降低."""
-        # 原系统成本估算（基于复杂度）
+        """Estimate cost reduction compared to original system."""
+        # Original system cost estimation (based on complexity)
         if complexity_score < 5:
-            original_cost = 100  # 单agent成本基准
+            original_cost = 100  # Single agent cost baseline
         elif complexity_score < 15:
-            original_cost = 300  # 混合team成本
+            original_cost = 300  # Mixed team cost
         else:
-            original_cost = 600  # 完整多agent成本
+            original_cost = 600  # Full multi-agent cost
 
-        # 新系统成本（基于思维方向数量和时间）
+        # New system cost (based on thinking direction count and time)
         thinking_count = len(strategy.thinking_sequence)
         new_cost = thinking_count * 50 + strategy.estimated_time_seconds * 0.1
 
-        # 计算降低百分比
+        # Calculate reduction percentage
         if original_cost > 0:
             reduction = max(0, (original_cost - new_cost) / original_cost * 100)
         else:
             reduction = 0
 
-        return min(reduction, 85)  # 最大85%的降低
+        return min(reduction, 85)  # Maximum 85% reduction
 
 
-# 便利函数
+# Convenience functions
 def create_multi_thinking_router(
     complexity_analyzer=None,
 ) -> MultiThinkingIntelligentRouter:
-    """创建多向思维智能路由器."""
+    """Create multi-directional thinking intelligent router."""
     return MultiThinkingIntelligentRouter(complexity_analyzer)
 
 
 async def route_thought_to_thinking(thought_data: "ThoughtData") -> RoutingDecision:
-    """将思想路由到最佳思维序列."""
+    """Route thought to optimal thinking sequence."""
     router = MultiThinkingIntelligentRouter()
     return await router.route_thought(thought_data)

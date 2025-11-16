@@ -148,7 +148,9 @@ class TestMultiThinkingState:
         assert state.success_rate == 0.5  # 1 success, 1 failure
 
         state.mark_agent_completed("critical", "Done", 1.0)
-        assert state.success_rate == pytest.approx(0.6667, rel=1e-4)  # 2 success, 1 failure
+        assert state.success_rate == pytest.approx(
+            0.6667, rel=1e-4
+        )  # 2 success, 1 failure
 
     def test_get_summary(self):
         """Test state summary generation."""
@@ -195,7 +197,14 @@ class TestMultiThinkingState:
         state = MultiThinkingState()
         state.current_strategy = "full_sequence"
         state.current_complexity_score = 9.2
-        state.thinking_sequence = ["factual", "emotional", "critical", "optimistic", "creative", "synthesis"]
+        state.thinking_sequence = [
+            "factual",
+            "emotional",
+            "critical",
+            "optimistic",
+            "creative",
+            "synthesis",
+        ]
         state.cost_reduction = 15.5
         state.processing_stage = "execution"
 
@@ -229,7 +238,9 @@ class TestMultiThinkingState:
         assert len(state.failed_agents) == 1
         assert state.success_rate == 0.8  # 4 out of 5 succeeded
         assert state.all_agents_complete is True
-        assert state.total_processing_time == pytest.approx(4.7)  # 1.2 + 0.9 + 1.1 + 1.5
+        assert state.total_processing_time == pytest.approx(
+            4.7
+        )  # 1.2 + 0.9 + 1.1 + 1.5
 
         total_tokens = state.total_tokens_used
         assert total_tokens["input_tokens"] == 550  # 150 + 100 + 120 + 180

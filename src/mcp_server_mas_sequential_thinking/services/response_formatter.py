@@ -5,6 +5,9 @@ modes, extracting content from Agno RunOutput objects, and preparing final respo
 """
 
 from mcp_server_mas_sequential_thinking.core import ThoughtData
+from mcp_server_mas_sequential_thinking.services.response_processor import (
+    ResponseExtractor,
+)
 from mcp_server_mas_sequential_thinking.utils import setup_logging
 
 logger = setup_logging()
@@ -48,9 +51,6 @@ class ResponseFormatter:
             Extracted text content
         """
         # Import ResponseExtractor to handle the extraction
-        from mcp_server_mas_sequential_thinking.services.response_processor import (
-            ResponseExtractor,
-        )
 
         return ResponseExtractor.extract_content(response)
 
@@ -131,56 +131,3 @@ class ResponseFormatter:
             pass
 
         logger.info(f"  {'=' * separator_length}")
-
-
-class ResponseExtractor:
-    """Utility class for extracting content from various response types."""
-
-    @staticmethod
-    def extract_content(response) -> str:
-        """Extract clean content from Agno RunOutput objects.
-
-        This method handles various response formats and extracts the actual
-        text content that should be returned to the user.
-
-        Args:
-            response: The response object from agent processing
-
-        Returns:
-            Extracted text content as string
-        """
-        # Handle string responses directly
-        if isinstance(response, str):
-            return response.strip()
-
-        # Handle Agno RunOutput objects
-        if hasattr(response, "content"):
-            content = response.content
-            if isinstance(content, str):
-                return content.strip()
-            if isinstance(content, list):
-                # Handle list of content items
-                text_parts = []
-                for item in content:
-                    if isinstance(item, str):
-                        text_parts.append(item)
-                    elif hasattr(item, "text"):
-                        text_parts.append(item.text)
-                    elif hasattr(item, "content"):
-                        text_parts.append(str(item.content))
-                return "\n".join(text_parts).strip()
-
-        # Handle objects with text attribute
-        if hasattr(response, "text"):
-            return response.text.strip()
-
-        # Handle objects with message attribute
-        if hasattr(response, "message"):
-            message = response.message
-            if isinstance(message, str):
-                return message.strip()
-            if hasattr(message, "content"):
-                return str(message.content).strip()
-
-        # Fallback: convert to string
-        return str(response).strip()

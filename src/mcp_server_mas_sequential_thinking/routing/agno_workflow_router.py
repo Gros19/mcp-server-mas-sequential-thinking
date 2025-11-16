@@ -1,7 +1,7 @@
 """Multi-Thinking Workflow Router - Complete Rewrite.
 
-纯净的多向思维工作流实现, 基于Agno v2.0框架。
-完全移除旧的复杂度路由, 专注于多向思维方法论。
+Pure multi-directional thinking workflow implementation based on Agno v2.0.
+Completely removes old complexity routing, focuses on multi-thinking.
 """
 
 import logging
@@ -87,9 +87,7 @@ class MultiThinkingWorkflowRouter:
         """
         return MultiThinkingState(
             current_strategy=session_state.get("current_strategy", "pending"),
-            current_complexity_score=session_state.get(
-                "current_complexity_score", 0.0
-            ),
+            current_complexity_score=session_state.get("current_complexity_score", 0.0),
             thinking_sequence=session_state.get("thinking_sequence", []),
             cost_reduction=session_state.get("cost_reduction", 0.0),
             processing_stage=session_state.get("processing_stage", "initialization"),

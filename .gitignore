@@ -12,3 +12,8 @@ wheels/
 
 # Testing
 .hypothesis/
+.pytest_cache/
+.coverage
+htmlcov/
+.coverage.*
+test-results.xml

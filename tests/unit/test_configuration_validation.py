@@ -25,10 +25,11 @@ class TestConfigurationValidation:
 
     def test_valid_github_token_formats(self):
         """Test that valid GitHub token formats are accepted."""
+        # Use tokens with sufficient entropy (varied characters) and correct lengths
         valid_tokens = [
-            "ghp_" + "a" * 36,  # Classic PAT
-            "github_pat_" + "a" * 80,  # Fine-grained PAT
-            "gho_" + "a" * 36,  # OAuth token
+            "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789",  # Classic PAT (40 chars total: ghp_ + 36)
+            "github_pat_" + "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890123456789012345678901234567890",  # Fine-grained PAT (93+ chars)
+            "gho_" + "abcdefghijklmnopqrstuvwxyz0123456789",  # OAuth token (40 chars total: gho_ + 36)
         ]
 
         for token in valid_tokens:
@@ -157,8 +158,9 @@ class TestConfigurationEdgeCases:
         config_manager = ConfigurationManager()
 
         with patch.dict(os.environ, {"TEST_API_KEY": ""}, clear=True):
-            # Empty string should be treated as missing
-            config_manager._validate_api_key_format("TEST_API_KEY", "")
+            # Empty string should raise validation error
+            with pytest.raises(ValueError, match="is empty"):
+                config_manager._validate_api_key_format("TEST_API_KEY", "")
 
     def test_whitespace_only_keys(self):
         """Test handling of whitespace-only API keys."""
@@ -179,6 +181,7 @@ class TestConfigurationEdgeCases:
         """Test that unicode characters in API keys are handled."""
         config_manager = ConfigurationManager()
 
-        unicode_key = "sk-test_key_with_ñ_and_émojis_🔑"
+        # Use unicode characters without triggering placeholder detection
+        unicode_key = "sk-real_key_with_ñ_and_émojis_🔑abc"
         with pytest.raises(ValueError, match="invalid characters"):
             config_manager._validate_api_key_format("TEST_API_KEY", unicode_key)

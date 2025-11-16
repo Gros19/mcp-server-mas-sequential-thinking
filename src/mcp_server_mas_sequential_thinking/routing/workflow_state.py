@@ -38,7 +38,9 @@ class MultiThinkingState:
     cost_reduction: float = 0.0
 
     # Processing stage tracking
-    processing_stage: str = "initialization"  # initialization, analysis, synthesis, complete, error
+    processing_stage: str = (
+        "initialization"  # initialization, analysis, synthesis, complete, error
+    )
 
     # Agent execution tracking
     active_agents: list[str] = field(default_factory=list)
@@ -69,9 +71,7 @@ class MultiThinkingState:
         if agent_name not in self.active_agents:
             self.active_agents.append(agent_name)
 
-    def mark_agent_completed(
-        self, agent_name: str, result: str, timing: float
-    ) -> None:
+    def mark_agent_completed(self, agent_name: str, result: str, timing: float) -> None:
         """Mark agent as completed with result.
 
         Args:
@@ -155,9 +155,7 @@ class MultiThinkingState:
         Returns:
             Dictionary with input_tokens, output_tokens, and total_tokens
         """
-        total_input = sum(
-            usage["input_tokens"] for usage in self.token_usage.values()
-        )
+        total_input = sum(usage["input_tokens"] for usage in self.token_usage.values())
         total_output = sum(
             usage["output_tokens"] for usage in self.token_usage.values()
         )

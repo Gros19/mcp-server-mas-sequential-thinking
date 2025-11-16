@@ -12,14 +12,7 @@ import sys
 
 def run_command(cmd: list[str], description: str) -> int:
     """Run a command and return its exit code."""
-    result = subprocess.run(cmd, check=False, capture_output=False)
-
-    if result.returncode == 0:
-        pass
-    else:
-        pass
-
-    return result.returncode
+    return subprocess.run(cmd, check=False, capture_output=False).returncode
 
 
 def main() -> None:
@@ -137,7 +130,6 @@ Examples:
         pass
 
     if exit_code == 0:
-
         # Run additional quality checks if all tests pass
 
         # Type checking

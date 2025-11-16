@@ -348,7 +348,10 @@ class MultiThinkingSequentialProcessor:
             )
 
             # All agents receive original input directly (parallel processing)
-            task = agent.arun(input=thought_data.thought, num_history_messages=MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5))
+            task = agent.arun(
+                input=thought_data.thought,
+                num_history_messages=MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5),
+            )
             tasks.append((thinking_direction, task))
 
         # Execute all thinking directions in parallel
@@ -397,8 +400,11 @@ class MultiThinkingSequentialProcessor:
                 ThinkingDirection.SYNTHESIS, initial_synthesis_model, context, {}
             )
 
-            initial_result = await initial_synthesis_agent.arun(num_history_messages=MESSAGE_HISTORY_CONFIG.get(ThinkingDirection.SYNTHESIS, 10),
-                input=thought_data.thought
+            initial_result = await initial_synthesis_agent.arun(
+                num_history_messages=MESSAGE_HISTORY_CONFIG.get(
+                    ThinkingDirection.SYNTHESIS, 10
+                ),
+                input=thought_data.thought,
             )
             initial_content = self._extract_content(initial_result)
             individual_results["synthesis_initial"] = initial_content
@@ -436,7 +442,12 @@ class MultiThinkingSequentialProcessor:
                 )
 
                 # All non-synthesis agents receive original input (parallel processing)
-                task = agent.arun(input=thought_data.thought, num_history_messages=MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5))
+                task = agent.arun(
+                    input=thought_data.thought,
+                    num_history_messages=MESSAGE_HISTORY_CONFIG.get(
+                        thinking_direction, 5
+                    ),
+                )
                 tasks.append((thinking_direction, task))
 
             # Execute all non-synthesis agents in parallel
@@ -485,7 +496,12 @@ class MultiThinkingSequentialProcessor:
                 thought_data.thought, integration_results
             )
 
-            final_result = await final_synthesis_agent.arun(num_history_messages=MESSAGE_HISTORY_CONFIG.get(ThinkingDirection.SYNTHESIS, 10), input=synthesis_input)
+            final_result = await final_synthesis_agent.arun(
+                num_history_messages=MESSAGE_HISTORY_CONFIG.get(
+                    ThinkingDirection.SYNTHESIS, 10
+                ),
+                input=synthesis_input,
+            )
             final_content = self._extract_content(final_result)
             individual_results["synthesis_final"] = final_content
 
