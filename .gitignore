@@ -17,3 +17,7 @@ wheels/
 htmlcov/
 .coverage.*
 test-results.xml
+
+# Temporary test files in root (avoid creating these)
+/test_*.py
+/TEST_*.md

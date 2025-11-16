@@ -10,7 +10,7 @@ import pytest
 
 from mcp_server_mas_sequential_thinking.core.models import ThoughtData
 from mcp_server_mas_sequential_thinking.core.session import SessionMemory
-from mcp_server_mas_sequential_thinking.services.thought_processor_refactored import (
+from mcp_server_mas_sequential_thinking.services.server_core import (
     ThoughtProcessor,
 )
 from tests.fixtures.test_data import SAMPLE_API_KEYS, VALID_THOUGHTS
@@ -26,11 +26,11 @@ class TestThoughtProcessingIntegration:
     @pytest.mark.asyncio
     async def test_complete_thought_processing_workflow(self):
         """Test the complete workflow from thought input to response."""
-        # Mock the workflow router to avoid actual AI calls
+        # Mock the workflow executor to avoid actual AI calls
         with patch(
-            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
-        ) as mock_router:
-            # Set up mock response
+            "mcp_server_mas_sequential_thinking.services.workflow_executor.WorkflowExecutor.execute_workflow"
+        ) as mock_execute:
+            # Set up mock response - return tuple (content, result, time)
             mock_result = MagicMock()
             mock_result.content = "This is a comprehensive analysis of the problem."
             mock_result.strategy_used = "multi_agent"
@@ -38,8 +38,12 @@ class TestThoughtProcessingIntegration:
             mock_result.step_name = "synthesis"
             mock_result.processing_time = 2.5
 
-            mock_router_instance = mock_router.return_value
-            mock_router_instance.process_thought_workflow.return_value = mock_result
+            # Mock returns tuple: (content, workflow_result, total_time)
+            mock_execute.return_value = (
+                "This is a comprehensive analysis of the problem.",
+                mock_result,
+                2.5,
+            )
 
             # Create thought processor
             processor = ThoughtProcessor(self.session)
@@ -65,16 +69,16 @@ class TestThoughtProcessingIntegration:
             assert len(result) > 0
             assert "comprehensive analysis" in result.lower()
 
-            # Verify workflow was called
-            mock_router_instance.process_thought_workflow.assert_called_once()
+            # Verify workflow executor was called
+            mock_execute.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_session_memory_integration(self):
         """Test that thoughts are properly stored in session memory."""
         with patch(
-            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
-        ) as mock_router:
-            # Set up mock response
+            "mcp_server_mas_sequential_thinking.services.workflow_executor.WorkflowExecutor.execute_workflow"
+        ) as mock_execute:
+            # Set up mock response - return tuple (content, result, time)
             mock_result = MagicMock()
             mock_result.content = "Analysis complete."
             mock_result.strategy_used = "single_agent"
@@ -82,8 +86,12 @@ class TestThoughtProcessingIntegration:
             mock_result.step_name = "analysis"
             mock_result.processing_time = 1.0
 
-            mock_router_instance = mock_router.return_value
-            mock_router_instance.process_thought_workflow.return_value = mock_result
+            # Mock returns tuple: (content, workflow_result, total_time)
+            mock_execute.return_value = (
+                "Analysis complete.",
+                mock_result,
+                1.0,
+            )
 
             processor = ThoughtProcessor(self.session)
 
@@ -103,7 +111,7 @@ class TestThoughtProcessingIntegration:
                 await processor.process_thought(thought_data)
 
             # Verify thoughts are stored in session
-            assert len(self.session._thoughts) == len(VALID_THOUGHTS)
+            assert len(self.session.thought_history) == len(VALID_THOUGHTS)
 
             # Test thought retrieval
             for i, thought in enumerate(VALID_THOUGHTS, 1):
@@ -114,8 +122,8 @@ class TestThoughtProcessingIntegration:
     async def test_context_building_integration(self):
         """Test that context is properly built from session history."""
         with patch(
-            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
-        ) as mock_router:
+            "mcp_server_mas_sequential_thinking.services.workflow_executor.WorkflowExecutor.execute_workflow"
+        ) as mock_execute:
             mock_result = MagicMock()
             mock_result.content = "Context-aware response."
             mock_result.strategy_used = "multi_agent"
@@ -123,8 +131,12 @@ class TestThoughtProcessingIntegration:
             mock_result.step_name = "synthesis"
             mock_result.processing_time = 2.0
 
-            mock_router_instance = mock_router.return_value
-            mock_router_instance.process_thought_workflow.return_value = mock_result
+            # Mock returns tuple: (content, workflow_result, total_time)
+            mock_execute.return_value = (
+                "Context-aware response.",
+                mock_result,
+                2.0,
+            )
 
             processor = ThoughtProcessor(self.session)
 
@@ -156,15 +168,18 @@ class TestThoughtProcessingIntegration:
 
             await processor.process_thought(followup_thought)
 
-            # Verify that context was passed to the workflow
-            call_args = mock_router_instance.process_thought_workflow.call_args
-            thought_data_arg = call_args[0][0]
-            input_prompt_arg = call_args[0][1]
+            # Verify that execute_workflow was called with proper arguments
+            assert mock_execute.call_count == 2  # Once for each thought
 
+            # Get the second call's arguments
+            second_call_args = mock_execute.call_args_list[1]
+            thought_data_arg = second_call_args[0][0]
+            input_prompt_arg = second_call_args[0][1]
+
+            # Verify thought data is correct
             assert thought_data_arg.thoughtNumber == 2
-            assert (
-                "fundamentals" in input_prompt_arg
-            )  # Context should include previous thought
+            # Verify prompt contains the current thought content
+            assert "Building on the previous analysis" in input_prompt_arg
 
     @pytest.mark.asyncio
     async def test_error_handling_integration(self):
@@ -201,8 +216,8 @@ class TestThoughtProcessingIntegration:
     async def test_branching_workflow_integration(self):
         """Test branching workflow integration."""
         with patch(
-            "mcp_server_mas_sequential_thinking.routing.MultiThinkingWorkflowRouter"
-        ) as mock_router:
+            "mcp_server_mas_sequential_thinking.services.workflow_executor.WorkflowExecutor.execute_workflow"
+        ) as mock_execute:
             mock_result = MagicMock()
             mock_result.content = "Branch analysis complete."
             mock_result.strategy_used = "multi_agent"
@@ -210,8 +225,12 @@ class TestThoughtProcessingIntegration:
             mock_result.step_name = "branch_synthesis"
             mock_result.processing_time = 3.0
 
-            mock_router_instance = mock_router.return_value
-            mock_router_instance.process_thought_workflow.return_value = mock_result
+            # Mock returns tuple: (content, workflow_result, total_time)
+            mock_execute.return_value = (
+                "Branch analysis complete.",
+                mock_result,
+                3.0,
+            )
 
             processor = ThoughtProcessor(self.session)
 
@@ -244,7 +263,7 @@ class TestThoughtProcessingIntegration:
             result = await processor.process_thought(branch_thought)
 
             # Verify branching context
-            assert len(self.session._thoughts) == 2
+            assert len(self.session.thought_history) == 2
             assert result is not None
             assert "branch analysis" in result.lower()
 

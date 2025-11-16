@@ -461,7 +461,7 @@ mcp-server-mas-sequential-thinking/
 │   │   ├── ai_complexity_analyzer.py    # AI-powered analysis
 │   │   └── multi_thinking_router.py     # Intelligent routing
 │   ├── services/
-│   │   ├── thought_processor_refactored.py
+│   │   ├── server_core.py                   # ThoughtProcessor implementation
 │   │   ├── workflow_executor.py
 │   │   └── context_builder.py
 │   └── config/

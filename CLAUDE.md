@@ -8,10 +8,18 @@ uv pip install -e ".[dev]"                              # Install dependencies
 uv run mcp-server-mas-sequential-thinking               # Run server
 uv run ruff check . --fix && uv run ruff format . && uv run mypy .  # Code quality
 
-# Testing Framework
-python run_tests.py                                     # Run all tests with coverage
-python run_tests.py --unit --security                   # Run unit and security tests
-uv run pytest tests/ -v                                 # Direct pytest execution
+# Testing Framework (using Makefile)
+make test                                               # Run all tests with coverage + quality checks
+make test-unit                                          # Run unit tests only
+make test-fast                                          # Fast run without coverage
+make test-parallel                                      # Run tests in parallel
+make test-coverage                                      # Generate HTML coverage report
+make help                                               # Show all available commands
+
+# Direct Pytest Commands
+uv run pytest tests/ -v                                 # Run all tests
+uv run pytest -m unit                                   # Run tests with specific marker
+uv run pytest --no-cov                                  # Skip coverage
 
 # Debugging & Monitoring
 tail -f ~/.sequential_thinking/logs/sequential_thinking.log          # Live logs

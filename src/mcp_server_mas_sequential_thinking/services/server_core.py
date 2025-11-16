@@ -337,47 +337,144 @@ class ServerState:
 
 
 class ThoughtProcessor:
-    """Simplified thought processor that delegates to the refactored implementation.
+    """Thought processor using dependency injection and clean architecture.
 
-    This maintains backward compatibility while using the new service-based architecture.
+    This class orchestrates thought processing by delegating specific responsibilities
+    to specialized services, maintaining a clean separation of concerns.
     """
 
+    __slots__ = (
+        "_context_builder",
+        "_metrics_logger",
+        "_processing_orchestrator",
+        "_response_formatter",
+        "_session",
+        "_workflow_executor",
+    )
+
     def __init__(self, session: SessionMemory) -> None:
-        # Import and delegate to the refactored implementation
-        from .thought_processor_refactored import (
-            ThoughtProcessor as RefactoredProcessor,
+        """Initialize the thought processor with dependency injection.
+
+        Args:
+            session: The session memory instance for accessing team and context
+        """
+        import time
+
+        from mcp_server_mas_sequential_thinking.config import ProcessingDefaults
+        from mcp_server_mas_sequential_thinking.core import (
+            ProcessingMetadata,
+            ThoughtProcessingError,
+        )
+        from mcp_server_mas_sequential_thinking.infrastructure import MetricsLogger
+
+        from .context_builder import ContextBuilder
+        from .processing_orchestrator import ProcessingOrchestrator
+        from .response_formatter import ResponseFormatter
+        from .response_processor import ResponseProcessor
+        from .retry_handler import TeamProcessingRetryHandler
+        from .workflow_executor import WorkflowExecutor
+
+        self._session = session
+
+        # Initialize core services with dependency injection
+        self._context_builder = ContextBuilder(session)
+        self._workflow_executor = WorkflowExecutor(session)
+        self._response_formatter = ResponseFormatter()
+
+        # Initialize supporting services
+        response_processor = ResponseProcessor()
+        retry_handler = TeamProcessingRetryHandler()
+        self._processing_orchestrator = ProcessingOrchestrator(
+            session, response_processor, retry_handler
         )
 
-        self._processor = RefactoredProcessor(session)
+        # Initialize monitoring services
+        self._metrics_logger = MetricsLogger()
+
+        logger.info("ThoughtProcessor initialized with specialized services")
 
     async def process_thought(self, thought_data: ThoughtData) -> str:
-        """Process a thought through the team with comprehensive error handling."""
-        return await self._processor.process_thought(thought_data)
+        """Process a thought through the appropriate workflow with comprehensive error handling.
 
-    # Legacy methods for backward compatibility - delegate to refactored processor
-    def _extract_response_content(self, response) -> str:
-        """Legacy method - delegates to refactored processor."""
-        return self._processor._extract_response_content(response)
+        This is the main public API method that orchestrates the complete thought processing
+        workflow using specialized services.
 
-    def _build_context_prompt(self, thought_data: ThoughtData) -> str:
-        """Legacy method - delegates to refactored processor."""
-        return self._processor._build_context_prompt(thought_data)
+        Args:
+            thought_data: The thought data to process
 
-    def _format_response(self, content: str, thought_data: ThoughtData) -> str:
-        """Legacy method - delegates to refactored processor."""
-        return self._processor._format_response(content, thought_data)
+        Returns:
+            Processed thought response
 
-    async def _execute_single_agent_processing(
-        self, input_prompt: str, routing_decision=None
-    ) -> str:
-        """Legacy method - delegates to refactored processor."""
-        return await self._processor._execute_single_agent_processing(
-            input_prompt, routing_decision
+        Raises:
+            ThoughtProcessingError: If processing fails
+        """
+        import time
+
+        from mcp_server_mas_sequential_thinking.config import ProcessingDefaults
+        from mcp_server_mas_sequential_thinking.core import (
+            ProcessingMetadata,
+            ThoughtProcessingError,
         )
 
-    async def _execute_team_processing(self, input_prompt: str) -> str:
-        """Legacy method - delegates to refactored processor."""
-        return await self._processor._execute_team_processing(input_prompt)
+        try:
+            start_time = time.time()
+
+            # Log thought data and add to session (async for thread safety)
+            self._log_thought_data(thought_data)
+            await self._session.add_thought(thought_data)
+
+            # Build context using specialized service (async for thread safety)
+            input_prompt = await self._context_builder.build_context_prompt(
+                thought_data
+            )
+            await self._context_builder.log_context_building(thought_data, input_prompt)
+
+            # Execute Multi-Thinking workflow using specialized service
+            (
+                content,
+                workflow_result,
+                total_time,
+            ) = await self._workflow_executor.execute_workflow(
+                thought_data, input_prompt, start_time
+            )
+
+            # Format response using specialized service
+            final_response = self._response_formatter.format_response(
+                content, thought_data
+            )
+
+            # Log workflow completion
+            self._workflow_executor.log_workflow_completion(
+                thought_data, workflow_result, total_time, final_response
+            )
+
+            return final_response
+
+        except Exception as e:
+            error_msg = f"Failed to process {thought_data.thought_type.value} thought #{thought_data.thoughtNumber}: {e}"
+            logger.error(error_msg, exc_info=True)
+            metadata: ProcessingMetadata = {
+                "error_count": ProcessingDefaults.ERROR_COUNT_INITIAL,
+                "retry_count": ProcessingDefaults.RETRY_COUNT_INITIAL,
+                "processing_time": ProcessingDefaults.PROCESSING_TIME_INITIAL,
+            }
+            raise ThoughtProcessingError(error_msg, metadata) from e
+
+    def _log_thought_data(self, thought_data: ThoughtData) -> None:
+        """Log comprehensive thought data information using centralized logger.
+
+        Args:
+            thought_data: The thought data to log
+        """
+        basic_info = {
+            f"Thought #{thought_data.thoughtNumber}": f"{thought_data.thoughtNumber}/{thought_data.totalThoughts}",
+            "Type": thought_data.thought_type.value,
+            "Content": thought_data.thought,
+            "Next needed": thought_data.nextThoughtNeeded,
+            "Needs more": thought_data.needsMoreThoughts,
+        }
+
+        logger.info(f"Processing thought data: {basic_info}")
 
 
 @asynccontextmanager
