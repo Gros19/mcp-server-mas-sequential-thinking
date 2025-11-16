@@ -23,6 +23,9 @@ from mcp_server_mas_sequential_thinking.processors.multi_thinking_processor impo
     MultiThinkingSequentialProcessor,
     create_multi_thinking_step_output,
 )
+from mcp_server_mas_sequential_thinking.routing.workflow_state import (
+    MultiThinkingState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,51 @@ class MultiThinkingWorkflowRouter:
 
         logger.info("Multi-Thinking Workflow Router initialized")
 
+    def _get_typed_state_from_session(
+        self, session_state: dict[str, Any]
+    ) -> MultiThinkingState:
+        """Extract typed state from session_state dict.
+
+        Provides type-safe access to workflow state while maintaining
+        compatibility with Agno 2.2.12's session_state pattern.
+
+        Args:
+            session_state: Agno session_state dictionary
+
+        Returns:
+            Typed MultiThinkingState instance
+        """
+        return MultiThinkingState(
+            current_strategy=session_state.get("current_strategy", "pending"),
+            current_complexity_score=session_state.get(
+                "current_complexity_score", 0.0
+            ),
+            thinking_sequence=session_state.get("thinking_sequence", []),
+            cost_reduction=session_state.get("cost_reduction", 0.0),
+            processing_stage=session_state.get("processing_stage", "initialization"),
+            start_time=session_state.get("start_time"),
+        )
+
+    def _save_typed_state_to_session(
+        self, state: MultiThinkingState, session_state: dict[str, Any]
+    ) -> None:
+        """Save typed state back to session_state dict.
+
+        Converts typed state model to session_state dict format for
+        compatibility with Agno 2.2.12.
+
+        Args:
+            state: Typed state to save
+            session_state: Target session_state dictionary
+        """
+        session_state["current_strategy"] = state.current_strategy
+        session_state["current_complexity_score"] = state.current_complexity_score
+        session_state["thinking_sequence"] = state.thinking_sequence
+        session_state["cost_reduction"] = state.cost_reduction
+        session_state["processing_stage"] = state.processing_stage
+        if state.start_time is not None:
+            session_state["start_time"] = state.start_time
+
     def _multi_thinking_selector(self, step_input: StepInput) -> list[Step]:
         """Selector that always returns Multi-Thinking processing."""
         try:
@@ -104,9 +152,17 @@ class MultiThinkingWorkflowRouter:
         async def multi_thinking_executor(
             step_input: StepInput, session_state: dict[str, Any]
         ) -> StepOutput:
-            """Execute Multi-Thinking thinking process."""
+            """Execute Multi-Thinking thinking process with typed state.
+
+            Uses typed state model for type-safety while maintaining Agno 2.2.12
+            session_state compatibility.
+            """
             try:
                 logger.info("🎩 MULTI-THINKING STEP EXECUTION:")
+
+                # Convert session_state to typed state for type-safe operations
+                state = self._get_typed_state_from_session(session_state)
+                state.processing_stage = "analysis"
 
                 # Extract thought content and metadata
                 if isinstance(step_input.input, dict):
@@ -163,20 +219,31 @@ class MultiThinkingWorkflowRouter:
                     )
                 )
 
-                # Store metadata in session_state
-                session_state["current_strategy"] = result.strategy_used
-                session_state["current_complexity_score"] = result.complexity_score
-                session_state["thinking_sequence"] = result.thinking_sequence
-                session_state["cost_reduction"] = result.cost_reduction
+                # Update typed state (type-safe operations)
+                state.current_strategy = result.strategy_used
+                state.current_complexity_score = result.complexity_score
+                state.thinking_sequence = result.thinking_sequence
+                state.cost_reduction = result.cost_reduction
+                state.processing_stage = "synthesis_complete"
+
+                # Save typed state back to session_state dict
+                self._save_typed_state_to_session(state, session_state)
 
                 logger.info("  ✅ Multi-Thinking completed: %s", result.strategy_used)
                 logger.info("  📊 Complexity: %.1f", result.complexity_score)
                 logger.info("  💰 Cost Reduction: %.1f%%", result.cost_reduction)
+                logger.info("  📊 State: %s", state)
 
                 return create_multi_thinking_step_output(result)
 
             except Exception as e:
                 logger.exception("  ❌ Multi-Thinking execution failed")
+
+                # Update state on error
+                state = self._get_typed_state_from_session(session_state)
+                state.processing_stage = "error"
+                self._save_typed_state_to_session(state, session_state)
+
                 return StepOutput(
                     content=f"Multi-Thinking processing failed: {e!s}",
                     success=False,
@@ -226,16 +293,21 @@ class MultiThinkingWorkflowRouter:
             logger.info("  📊 Input Keys: %s", list(workflow_input.keys()))
             logger.info("  📏 Input Size: %d chars", len(str(workflow_input)))
 
-            # Initialize session_state for metadata tracking
+            # Initialize session_state for metadata tracking (with typed state bridge)
             session_state: dict[str, Any] = {
                 "start_time": start_time,
                 "thought_number": thought_data.thoughtNumber,
                 "total_thoughts": thought_data.totalThoughts,
             }
 
-            logger.info("🎯 SESSION STATE SETUP:")
-            logger.info("  🔑 State Keys: %s", list(session_state.keys()))
-            logger.info("  📈 Metadata: %s", session_state)
+            # Pre-initialize typed state
+            initial_state = MultiThinkingState(start_time=start_time)
+            self._save_typed_state_to_session(initial_state, session_state)
+
+            logger.info("🎯 SESSION STATE SETUP (with typed state model):")
+            logger.info("  📊 Initial State: %s", initial_state)
+            logger.info("  🔢 Thought Number: %s", thought_data.thoughtNumber)
+            logger.info("  📈 Total Thoughts: %s", thought_data.totalThoughts)
 
             logger.info(
                 "▶️  EXECUTING Multi-Thinking workflow for thought #%s",
@@ -264,11 +336,12 @@ class MultiThinkingWorkflowRouter:
                 "..." if len(content) > 150 else "",
             )
 
-            # Get metadata from session_state
-            complexity_score = session_state.get("current_complexity_score", 0.0)
-            strategy_used = session_state.get("current_strategy", "multi_thinking")
-            thinking_sequence = session_state.get("thinking_sequence", [])
-            cost_reduction = session_state.get("cost_reduction", 0.0)
+            # Get metadata from typed state (type-safe access)
+            final_state = self._get_typed_state_from_session(session_state)
+            complexity_score = final_state.current_complexity_score
+            strategy_used = final_state.current_strategy
+            thinking_sequence = final_state.thinking_sequence
+            cost_reduction = final_state.cost_reduction
 
             logger.info("📊 WORKFLOW RESULT COMPILATION:")
             logger.info("  🎯 Strategy used: %s", strategy_used)
