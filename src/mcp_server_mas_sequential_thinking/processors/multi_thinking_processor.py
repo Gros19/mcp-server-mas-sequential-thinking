@@ -31,6 +31,17 @@ from .multi_thinking_core import (
 
 # logger already defined above
 
+# Message History Configuration (Agno 2.2.12+ optimization)
+# Defines optimal context window size for each thinking direction to reduce token usage
+MESSAGE_HISTORY_CONFIG = {
+    ThinkingDirection.FACTUAL: 5,  # Recent context for data gathering
+    ThinkingDirection.EMOTIONAL: 0,  # Fresh perspective without historical bias
+    ThinkingDirection.CRITICAL: 3,  # Focused risk analysis with minimal context
+    ThinkingDirection.OPTIMISTIC: 3,  # Focused opportunity analysis
+    ThinkingDirection.CREATIVE: 8,  # Broader context for creative connections
+    ThinkingDirection.SYNTHESIS: 10,  # Maximum context for comprehensive integration
+}
+
 
 @dataclass
 class MultiThinkingProcessingResult:
@@ -157,8 +168,14 @@ class MultiThinkingSequentialProcessor:
             thinking_direction, model, context, {}
         )
 
-        # Execute processing
-        result = await agent.arun(input=thought_data.thought)
+        # Execute processing with optimized message history
+        history_limit = MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5)
+        logger.info(
+            f"    Using {history_limit} message history for {thinking_direction.value}"
+        )
+        result = await agent.arun(
+            input=thought_data.thought, num_history_messages=history_limit
+        )
 
         # Extract content
         content = self._extract_content(result)
@@ -172,7 +189,9 @@ class MultiThinkingSequentialProcessor:
         self, thought_data: "ThoughtData", context: str, decision: RoutingDecision
     ) -> dict[str, Any]:
         """Process dual thinking direction sequence with parallel execution."""
-        direction1, direction2 = decision.strategy.thinking_sequence
+        thinking_sequence = decision.strategy.thinking_sequence
+        direction1: ThinkingDirection = thinking_sequence[0]
+        direction2: ThinkingDirection = thinking_sequence[1]
         logger.info(
             f"  DUAL THINKING SEQUENCE: {direction1.value} + {direction2.value} (parallel)"
         )
@@ -180,24 +199,34 @@ class MultiThinkingSequentialProcessor:
         individual_results = {}
 
         # Check if synthesis agent is involved
-        has_synthesis = any(d == ThinkingDirection.SYNTHESIS for d in [direction1, direction2])
+        has_synthesis = any(
+            d == ThinkingDirection.SYNTHESIS for d in [direction1, direction2]
+        )
 
         if has_synthesis:
             # If synthesis is involved, run non-synthesis agents in parallel, then synthesis
-            non_synthesis_directions = [d for d in [direction1, direction2] if d != ThinkingDirection.SYNTHESIS]
+            non_synthesis_directions = [
+                d for d in [direction1, direction2] if d != ThinkingDirection.SYNTHESIS
+            ]
             synthesis_direction = ThinkingDirection.SYNTHESIS
 
             # Run non-synthesis agents in parallel
             import asyncio
+
             tasks = []
             for direction in non_synthesis_directions:
                 model = self.model_config.create_standard_model()
-                logger.info(f"    Using standard model for {direction.value} thinking (parallel)")
+                history_limit = MESSAGE_HISTORY_CONFIG.get(direction, 5)
+                logger.info(
+                    f"    Using standard model for {direction.value} thinking (parallel, history={history_limit})"
+                )
 
                 agent = self.thinking_factory.create_thinking_agent(
                     direction, model, context, {}
                 )
-                task = agent.arun(input=thought_data.thought)
+                task = agent.arun(
+                    input=thought_data.thought, num_history_messages=history_limit
+                )
                 tasks.append((direction, task))
 
             # Execute parallel tasks
@@ -212,7 +241,9 @@ class MultiThinkingSequentialProcessor:
 
             # Run synthesis agent with all parallel results
             model = self.model_config.create_enhanced_model()
-            logger.info(f"    Using enhanced model for {synthesis_direction.value} synthesis")
+            logger.info(
+                f"    Using enhanced model for {synthesis_direction.value} synthesis"
+            )
 
             synthesis_agent = self.thinking_factory.create_thinking_agent(
                 synthesis_direction, model, context, individual_results
@@ -223,7 +254,17 @@ class MultiThinkingSequentialProcessor:
                 thought_data.thought, individual_results
             )
 
-            synthesis_result = await synthesis_agent.arun(input=synthesis_input)
+            # Synthesis needs more context for integration
+            synthesis_history_limit = MESSAGE_HISTORY_CONFIG.get(
+                ThinkingDirection.SYNTHESIS, 10
+            )
+            logger.info(
+                f"    Using {synthesis_history_limit} message history for synthesis"
+            )
+
+            synthesis_result = await synthesis_agent.arun(
+                input=synthesis_input, num_history_messages=synthesis_history_limit
+            )
             synthesis_content = self._extract_content(synthesis_result)
             individual_results[synthesis_direction.value] = synthesis_content
 
@@ -233,16 +274,22 @@ class MultiThinkingSequentialProcessor:
         else:
             # No synthesis agent - run both agents in parallel
             import asyncio
+
             tasks = []
 
             for direction in [direction1, direction2]:
                 model = self.model_config.create_standard_model()
-                logger.info(f"    Using standard model for {direction.value} thinking (parallel)")
+                history_limit = MESSAGE_HISTORY_CONFIG.get(direction, 5)
+                logger.info(
+                    f"    Using standard model for {direction.value} thinking (parallel, history={history_limit})"
+                )
 
                 agent = self.thinking_factory.create_thinking_agent(
                     direction, model, context, {}
                 )
-                task = agent.arun(input=thought_data.thought)
+                task = agent.arun(
+                    input=thought_data.thought, num_history_messages=history_limit
+                )
                 tasks.append((direction, task))
 
             # Execute parallel tasks
@@ -257,9 +304,11 @@ class MultiThinkingSequentialProcessor:
 
             # Combine results programmatically
             final_content = self._combine_dual_thinking_results(
-                direction1, individual_results[direction1.value],
-                direction2, individual_results[direction2.value],
-                thought_data.thought
+                direction1,
+                individual_results[direction1.value],
+                direction2,
+                individual_results[direction2.value],
+                thought_data.thought,
             )
 
         return {
@@ -280,21 +329,26 @@ class MultiThinkingSequentialProcessor:
 
         # Triple strategy currently uses FACTUAL + CREATIVE + CRITICAL - all run in parallel
         import asyncio
+
         tasks = []
 
         for thinking_direction in thinking_sequence:
-            logger.info(f"    Preparing {thinking_direction.value} thinking for parallel execution")
+            logger.info(
+                f"    Preparing {thinking_direction.value} thinking for parallel execution"
+            )
 
             # All agents use standard model (no synthesis in triple strategy)
             model = self.model_config.create_standard_model()
-            logger.info(f"      Using standard model for {thinking_direction.value} thinking")
+            logger.info(
+                f"      Using standard model for {thinking_direction.value} thinking"
+            )
 
             agent = self.thinking_factory.create_thinking_agent(
                 thinking_direction, model, context, {}
             )
 
             # All agents receive original input directly (parallel processing)
-            task = agent.arun(input=thought_data.thought)
+            task = agent.arun(input=thought_data.thought, num_history_messages=MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5))
             tasks.append((thinking_direction, task))
 
         # Execute all thinking directions in parallel
@@ -302,10 +356,14 @@ class MultiThinkingSequentialProcessor:
         parallel_results = await asyncio.gather(*[task for _, task in tasks])
 
         # Process parallel results
-        for (thinking_direction, _), result in zip(tasks, parallel_results, strict=False):
+        for (thinking_direction, _), result in zip(
+            tasks, parallel_results, strict=False
+        ):
             content = self._extract_content(result)
             individual_results[thinking_direction.value] = content
-            logger.info(f"      {thinking_direction.value} thinking completed (parallel)")
+            logger.info(
+                f"      {thinking_direction.value} thinking completed (parallel)"
+            )
 
         # Create programmatic synthesis (no synthesis agent in triple strategy)
         final_content = self._synthesize_triple_thinking_results(
@@ -339,7 +397,9 @@ class MultiThinkingSequentialProcessor:
                 ThinkingDirection.SYNTHESIS, initial_synthesis_model, context, {}
             )
 
-            initial_result = await initial_synthesis_agent.arun(input=thought_data.thought)
+            initial_result = await initial_synthesis_agent.arun(num_history_messages=MESSAGE_HISTORY_CONFIG.get(ThinkingDirection.SYNTHESIS, 10),
+                input=thought_data.thought
+            )
             initial_content = self._extract_content(initial_result)
             individual_results["synthesis_initial"] = initial_content
 
@@ -347,28 +407,36 @@ class MultiThinkingSequentialProcessor:
 
         # Step 2: Identify non-synthesis agents for parallel execution
         non_synthesis_agents = [
-            direction for direction in thinking_sequence
+            direction
+            for direction in thinking_sequence
             if direction != ThinkingDirection.SYNTHESIS
         ]
 
         if non_synthesis_agents:
-            logger.info(f"    Step 2: Parallel execution of {len(non_synthesis_agents)} thinking agents")
+            logger.info(
+                f"    Step 2: Parallel execution of {len(non_synthesis_agents)} thinking agents"
+            )
 
             import asyncio
+
             tasks = []
 
             for thinking_direction in non_synthesis_agents:
-                logger.info(f"      Preparing {thinking_direction.value} thinking for parallel execution")
+                logger.info(
+                    f"      Preparing {thinking_direction.value} thinking for parallel execution"
+                )
 
                 model = self.model_config.create_standard_model()
-                logger.info(f"        Using standard model for {thinking_direction.value} thinking")
+                logger.info(
+                    f"        Using standard model for {thinking_direction.value} thinking"
+                )
 
                 agent = self.thinking_factory.create_thinking_agent(
                     thinking_direction, model, context, {}
                 )
 
                 # All non-synthesis agents receive original input (parallel processing)
-                task = agent.arun(input=thought_data.thought)
+                task = agent.arun(input=thought_data.thought, num_history_messages=MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5))
                 tasks.append((thinking_direction, task))
 
             # Execute all non-synthesis agents in parallel
@@ -376,14 +444,19 @@ class MultiThinkingSequentialProcessor:
             parallel_results = await asyncio.gather(*[task for _, task in tasks])
 
             # Process parallel results
-            for (thinking_direction, _), result in zip(tasks, parallel_results, strict=False):
+            for (thinking_direction, _), result in zip(
+                tasks, parallel_results, strict=False
+            ):
                 content = self._extract_content(result)
                 individual_results[thinking_direction.value] = content
-                logger.info(f"        {thinking_direction.value} thinking completed (parallel)")
+                logger.info(
+                    f"        {thinking_direction.value} thinking completed (parallel)"
+                )
 
         # Step 3: Final SYNTHESIS for integration (if last agent is SYNTHESIS)
         final_synthesis_agents = [
-            i for i, direction in enumerate(thinking_sequence)
+            i
+            for i, direction in enumerate(thinking_sequence)
             if direction == ThinkingDirection.SYNTHESIS and i > 0
         ]
 
@@ -395,12 +468,16 @@ class MultiThinkingSequentialProcessor:
 
             # Remove initial synthesis from results for final integration
             integration_results = {
-                k: v for k, v in individual_results.items()
+                k: v
+                for k, v in individual_results.items()
                 if not k.startswith("synthesis_")
             }
 
             final_synthesis_agent = self.thinking_factory.create_thinking_agent(
-                ThinkingDirection.SYNTHESIS, final_synthesis_model, context, integration_results
+                ThinkingDirection.SYNTHESIS,
+                final_synthesis_model,
+                context,
+                integration_results,
             )
 
             # Build synthesis integration input
@@ -408,7 +485,7 @@ class MultiThinkingSequentialProcessor:
                 thought_data.thought, integration_results
             )
 
-            final_result = await final_synthesis_agent.arun(input=synthesis_input)
+            final_result = await final_synthesis_agent.arun(num_history_messages=MESSAGE_HISTORY_CONFIG.get(ThinkingDirection.SYNTHESIS, 10), input=synthesis_input)
             final_content = self._extract_content(final_result)
             individual_results["synthesis_final"] = final_content
 
