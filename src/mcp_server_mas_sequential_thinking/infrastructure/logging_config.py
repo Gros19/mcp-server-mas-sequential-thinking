@@ -7,6 +7,10 @@ import logging
 import logging.handlers
 import os
 import sys
+import time
+from collections.abc import Mapping
+from types import TracebackType
+from typing import Any
 from pathlib import Path
 
 
@@ -20,10 +24,11 @@ def setup_logging(level: str | None = None) -> logging.Logger:
         Configured logger instance for the application.
     """
     # Determine log level from environment or parameter
-    log_level = level or os.getenv("LOG_LEVEL", "INFO")
+    raw_level = level if level is not None else os.getenv("LOG_LEVEL")
+    log_level = (raw_level or "INFO").upper()
 
     try:
-        numeric_level = getattr(logging, log_level.upper())
+        numeric_level = getattr(logging, log_level)
     except AttributeError:
         numeric_level = logging.INFO
 
@@ -40,7 +45,7 @@ def setup_logging(level: str | None = None) -> logging.Logger:
 
     # Console handler for development/debugging
     if os.getenv("ENVIRONMENT") != "production":
-        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(numeric_level)
         console_formatter = logging.Formatter(
             "%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S"
@@ -82,14 +87,21 @@ def get_logger(name: str | None = None) -> logging.Logger:
         # Get caller's module name for better traceability
         import inspect
 
-        frame = inspect.currentframe().f_back
-        name = frame.f_globals.get("__name__", "sequential_thinking")
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame is not None else None
+        if caller is None:
+            name = "sequential_thinking"
+        else:
+            name = caller.f_globals.get("__name__", "sequential_thinking")
 
     return logging.getLogger(name)
 
 
 def log_performance_metric(
-    logger: logging.Logger, operation: str, duration: float, **kwargs
+    logger: logging.Logger,
+    operation: str,
+    duration: float,
+    **kwargs: Any,
 ) -> None:
     """Log performance metrics in consistent format.
 
@@ -122,7 +134,7 @@ def log_thought_processing(
     stage: str,
     thought_number: int,
     thought_length: int = 0,
-    **context,
+    **context: Any,
 ) -> None:
     """Log thought processing stages with structured data."""
     if logger.isEnabledFor(logging.INFO):
@@ -145,21 +157,24 @@ class LogTimer:
         self.logger = logger
         self.operation = operation
         self.level = level
-        self.start_time = None
+        self.start_time: float | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> "LogTimer":
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug("Starting: %s", self.operation)
-
-        import time
 
         self.start_time = time.time()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        import time
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        _ = exc_tb
 
-        duration = time.time() - self.start_time
+        duration = time.time() - (self.start_time or time.time())
 
         if exc_type is None:
             if self.logger.isEnabledFor(self.level):
@@ -190,7 +205,7 @@ class MetricsLogger:
         """Initialize metrics logger with specified logger name."""
         self.logger = logging.getLogger(logger_name)
 
-    def log_metrics_block(self, title: str, metrics: dict) -> None:
+    def log_metrics_block(self, title: str, metrics: Mapping[str, Any]) -> None:
         """Log a block of metrics with a title.
 
         Args:

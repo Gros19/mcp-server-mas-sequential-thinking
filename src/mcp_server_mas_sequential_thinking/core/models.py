@@ -62,33 +62,33 @@ class ThoughtData(BaseModel):
         description="Content of the thought",
     )
     # MCP API compatibility - camelCase field names required
-    thoughtNumber: ThoughtNumber = Field(  # noqa: N815
+    thoughtNumber: ThoughtNumber = Field(
         ...,
         ge=ValidationLimits.MIN_THOUGHT_NUMBER,
         description="Sequence number starting from 1",
     )
-    totalThoughts: int = Field(  # noqa: N815
+    totalThoughts: int = Field(
         ...,
         ge=1,
         description="Estimated total thoughts",
     )
-    nextThoughtNeeded: bool = Field(  # noqa: N815
+    nextThoughtNeeded: bool = Field(
         ..., description="Whether another thought is needed"
     )
 
     # Required workflow fields
-    isRevision: bool = Field(  # noqa: N815
+    isRevision: bool = Field(
         ..., description="Whether this revises a previous thought"
     )
-    branchFromThought: ThoughtNumber | None = Field(  # noqa: N815
+    branchFromThought: ThoughtNumber | None = Field(
         ...,
         ge=ValidationLimits.MIN_THOUGHT_NUMBER,
         description="Thought number to branch from",
     )
-    branchId: BranchId | None = Field(  # noqa: N815
+    branchId: BranchId | None = Field(
         ..., description="Unique branch identifier"
     )
-    needsMoreThoughts: bool = Field(  # noqa: N815
+    needsMoreThoughts: bool = Field(
         ..., description="Whether more thoughts are needed beyond estimate"
     )
 

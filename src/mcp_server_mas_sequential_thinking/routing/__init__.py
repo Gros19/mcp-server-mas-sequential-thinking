@@ -1,30 +1,31 @@
-"""Routing module for MCP Sequential Thinking Server.
+"""Routing module for MCP Sequential Thinking Server."""
 
-This module contains routing and workflow logic including adaptive routing,
-workflow routing, optimization, and multi-thinking routing functionality.
-"""
+from __future__ import annotations
 
-from .agno_workflow_router import (
-    MultiThinkingWorkflowResult,
-    MultiThinkingWorkflowRouter,
-)
-from .ai_complexity_analyzer import AIComplexityAnalyzer
-from .complexity_types import ComplexityLevel, ProcessingStrategy
-from .multi_thinking_router import (
-    MultiThinkingIntelligentRouter,
-    create_multi_thinking_router,
-)
+import importlib
 
 __all__ = [
-    # From ai_complexity_analyzer
     "AIComplexityAnalyzer",
-    # From complexity_types
     "ComplexityLevel",
-    # From multi_thinking_router
     "MultiThinkingIntelligentRouter",
-    # From agno_workflow_router
     "MultiThinkingWorkflowResult",
     "MultiThinkingWorkflowRouter",
     "ProcessingStrategy",
     "create_multi_thinking_router",
 ]
+
+
+def __getattr__(name: str):
+    if name in {"AIComplexityAnalyzer"}:
+        module = importlib.import_module(".ai_complexity_analyzer", __name__)
+        return getattr(module, name)
+    if name in {"ComplexityLevel", "ProcessingStrategy"}:
+        module = importlib.import_module(".complexity_types", __name__)
+        return getattr(module, name)
+    if name in {"MultiThinkingIntelligentRouter", "create_multi_thinking_router"}:
+        module = importlib.import_module(".multi_thinking_router", __name__)
+        return getattr(module, name)
+    if name in {"MultiThinkingWorkflowResult", "MultiThinkingWorkflowRouter"}:
+        module = importlib.import_module(".agno_workflow_router", __name__)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- LearningMachine-backed agent learning with culture updates and reasoning tools for synthesis agents
+- Event-driven token usage tracking from model request events
+
+### Changed
+- Upgraded Agno dependency to >=2.4.7
+- **BREAKING**: Routing simplified to mandatory `full_exploration` (legacy single/double/triple strategy modes removed)
+- Workflow now runs complexity analysis + full sequence only (condition-based simple/full branching removed)
+- Forced strategy validation now rejects legacy strategy keys and accepts only `full_exploration`
+- `sequentialthinking` tool contract now documents multi-step loop orchestration in tool description and input schema metadata
+- `sequentialthinking` now publishes `outputSchema` and returns `structuredContent` control fields (`should_continue`, `next_thought_number`, `stop_reason`, and parameter guidance)
+- Tool description and usage guidance now explicitly require active reflection (`isRevision=true` when correcting prior steps)
+
 ## [0.7.0] - 2025-09-24
 
 ### Added

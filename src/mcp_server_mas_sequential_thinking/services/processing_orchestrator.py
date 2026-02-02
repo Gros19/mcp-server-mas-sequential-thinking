@@ -6,7 +6,7 @@ execution flows based on complexity analysis.
 """
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agno.agent import Agent
 
@@ -106,7 +106,7 @@ class ProcessingOrchestrator:
             Processed response content
         """
         try:
-            response = await self._session.team.arun(input_prompt)
+            response = await self._get_team().arun(input_prompt)
             return self._extract_response_content(response)
         except Exception as e:
             raise ThoughtProcessingError(f"Team coordination failed: {e}") from e
@@ -129,7 +129,7 @@ class ProcessingOrchestrator:
 
         async def team_operation():
             start_time = time.time()
-            response = await self._session.team.arun(input_prompt)
+            response = await self._get_team().arun(input_prompt)
             processing_time = time.time() - start_time
 
             processed_response = self._response_processor.process_response(
@@ -156,7 +156,7 @@ class ProcessingOrchestrator:
             Configured Agent instance
         """
         model_config = get_model_config()
-        single_model = model_config.create_team_model()
+        single_model = model_config.create_standard_model()
 
         return Agent(
             name="SimpleProcessor",
@@ -208,7 +208,7 @@ Provide a focused response with clear guidance for the next step."""
         Returns:
             Dictionary containing team information
         """
-        team = self._session.team
+        team = self._get_team()
         return {
             "name": team.name,
             "member_count": len(team.members),
@@ -216,6 +216,13 @@ Provide a focused response with clear guidance for the next step."""
             "leader_model": getattr(team.model, "id", "unknown"),
             "member_names": ", ".join([m.name for m in team.members]),
         }
+
+    def _get_team(self) -> Any:
+        """Return team attached to session, or raise a clear error."""
+        team = getattr(self._session, "team", None)
+        if team is None:
+            raise ThoughtProcessingError("Team is not attached to the current session")
+        return team
 
     def _log_single_agent_call(self, agent: Agent, prompt: str) -> None:
         """Log single agent call details.

@@ -75,112 +75,34 @@ The system employs **6 specialized thinking agents**, each focused on a distinct
 
 The system uses **AI-driven complexity analysis** to determine the optimal thinking sequence:
 
-### Processing Strategies:
-1. **Single Agent** (Simple questions)
-   - Direct factual or emotional response
-   - Fastest processing for straightforward queries
+### Processing Strategy:
+- **Single fixed strategy**: `full_exploration` is mandatory for all requests
+- **No legacy modes**: single/double/triple routing paths are removed
+- **Complexity analysis retained**: metrics are still generated for observability
 
-2. **Double Agent** (Moderate complexity)
-   - Two-step sequences (e.g., Optimistic → Critical)
-   - Balanced perspectives for evaluation tasks
-
-3. **Triple Agent** (Core thinking)
-   - Factual → Creative → Synthesis
-   - Philosophical and analytical problems
-
-4. **Full Sequence** (Complex problems)
-   - All 6 agents orchestrated together
-   - Comprehensive multi-perspective analysis
-
-The AI analyzer evaluates:
+The AI analyzer still evaluates:
 - Problem complexity and semantic depth
 - Primary problem type (factual, emotional, creative, philosophical, etc.)
-- Required thinking modes for optimal solution
-- Appropriate model selection (Enhanced vs Standard)
+- Required thinking modes for observability and diagnostics
+- Model behavior metadata (Enhanced vs Standard usage)
 
 ### AI Routing Flow Diagram
 
 ```mermaid
 flowchart TD
     A[Input Thought] --> B[AI Complexity Analyzer]
-
-    B --> C{Problem Analysis}
-    C --> C1[Complexity Score<br/>0-100]
-    C --> C2[Problem Type<br/>FACTUAL/EMOTIONAL/<br/>CREATIVE/PHILOSOPHICAL]
-    C --> C3[Required Thinking Modes]
-
-    C1 --> D{Routing Decision}
-    C2 --> D
-    C3 --> D
-
-    D -->|Score: 0-25<br/>Simple| E1[Single Agent Strategy]
-    D -->|Score: 26-50<br/>Moderate| E2[Double Agent Strategy]
-    D -->|Score: 51-75<br/>Complex| E3[Triple Agent Strategy]
-    D -->|Score: 76-100<br/>Highly Complex| E4[Full Sequence Strategy]
-
-    %% Single Agent Flow
-    E1 --> F1[Factual Agent<br/>120s + ExaTools]
-    F1 --> G1[Direct Response]
-
-    %% Double Agent Flow (Full Parallel)
-    E2 --> DA1[Both Agents Run in Parallel]
-    DA1 --> DA2["Agent 1 e.g. Optimistic<br/>120s + ExaTools"]
-    DA1 --> DA3["Agent 2 e.g. Critical<br/>120s + ExaTools"]
-    DA2 --> G2[Programmatic Synthesis<br/>Combines both parallel results]
-    DA3 --> G2
-
-    %% Triple Agent Flow (Full Parallel)
-    E3 --> TA1[All 3 Agents Run in Parallel]
-    TA1 --> TA2[Factual Agent<br/>120s + ExaTools]
-    TA1 --> TA3[Creative Agent<br/>240s + ExaTools]
-    TA1 --> TA4[Critical Agent<br/>120s + ExaTools]
-    TA2 --> G3[Programmatic Synthesis<br/>Integrates all 3 results]
-    TA3 --> G3
-    TA4 --> G3
-
-    %% Full Sequence Flow (3-Step Process)
-    E4 --> FS1[Step 1: Initial Synthesis<br/>60s Enhanced Model<br/>Initial orchestration]
-    FS1 --> FS2[Step 2: Parallel Execution<br/>5 Agents Run Simultaneously]
-
-    FS2 --> FS2A[Factual Agent<br/>120s + ExaTools]
-    FS2 --> FS2B[Emotional Agent<br/>30s Quick Response]
-    FS2 --> FS2C[Optimistic Agent<br/>120s + ExaTools]
-    FS2 --> FS2D[Critical Agent<br/>120s + ExaTools]
-    FS2 --> FS2E[Creative Agent<br/>240s + ExaTools]
-
-    FS2A --> FS3[Step 3: Final Synthesis<br/>60s Enhanced Model<br/>Integrates all parallel results]
-    FS2B --> FS3
-    FS2C --> FS3
-    FS2D --> FS3
-    FS2E --> FS3
-
-    FS3 --> G4[Final Synthesis Output<br/>Comprehensive integrated result]
-
-    G1 --> H[Next Iteration or<br/>Final Answer]
-    G2 --> H
-    G3 --> H
-    G4 --> H
-
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-    style C fill:#fff3e0
-    style D fill:#e8f5e8
-    style TA1 fill:#ffecb3
-    style FS2 fill:#ffecb3
-    style G1 fill:#fce4ec
-    style G2 fill:#fce4ec
-    style G3 fill:#fce4ec
-    style G4 fill:#fce4ec
-    style H fill:#f1f8e9
+    B --> C[Complexity Metadata Stored]
+    C --> D[Fixed Strategy: full_exploration]
+    D --> E[Step 1: Initial Synthesis]
+    E --> F[Step 2: Parallel Specialist Agents]
+    F --> G[Step 3: Final Synthesis]
+    G --> H[Unified Response]
 ```
 
 **Key Insights:**
-- **Parallel Execution**: Non-synthesis agents run simultaneously for maximum efficiency
-- **Synthesis Integration**: Synthesis agents process parallel results sequentially
-- **Two Processing Types**:
-  - **Synthesis Agent**: Real AI agent using Enhanced Model for integration
-  - **Programmatic Synthesis**: Code-based combination when no Synthesis Agent
-- **Performance**: Parallel processing optimizes both speed and quality
+- **Deterministic behavior**: every request runs the same full multi-step path
+- **Parallel execution**: non-synthesis agents still run simultaneously
+- **Synthesis integration**: orchestration and final answer are both synthesis-driven
 
 ## Research Capabilities (ExaTools Integration)
 
@@ -231,8 +153,8 @@ In essence, the system evolved from a passive thought *recorder* to an active th
 
 1.  **Initiation:** An external LLM uses the `sequentialthinking` tool to define the problem and initiate the process.
 2.  **Tool Call:** The LLM calls the `sequentialthinking` tool with the current thought, structured according to the `ThoughtData` model.
-3.  **AI Complexity Analysis:** The system uses AI-powered analysis to determine the optimal thinking sequence based on problem complexity and type.
-4.  **Agent Routing:** Based on the analysis, the system routes the thought to the appropriate thinking agents (single, double, triple, or full sequence).
+3.  **AI Complexity Analysis:** The system still performs AI-powered analysis to capture complexity metadata and diagnostic signals.
+4.  **Fixed Strategy Execution:** The system always runs the mandatory `full_exploration` multi-step sequence.
 5.  **Parallel Processing:** Multiple thinking agents process the thought simultaneously from their specialized perspectives:
    - Factual agents gather objective data (with optional web research)
    - Critical agents identify risks and problems
@@ -257,23 +179,45 @@ The server exposes a single MCP tool that processes sequential thoughts:
 ### Parameters:
 ```typescript
 {
-  thought: string,              // Current thinking step content
-  thoughtNumber: number,         // Sequence number (≥1)
-  totalThoughts: number,         // Estimated total steps
-  nextThoughtNeeded: boolean,    // Is another step required?
-  isRevision: boolean,           // Revising previous thought?
-  branchFromThought?: number,    // Branch point (for exploration)
-  branchId?: string,             // Branch identifier
-  needsMoreThoughts: boolean     // Need to extend sequence?
+  thought: string,               // One focused reasoning step
+  thoughtNumber: number,         // 1-based step index; increment each call
+  totalThoughts: number,         // Planned number of steps
+  nextThoughtNeeded: boolean,    // true for intermediate steps, false on final step
+  isRevision: boolean,           // true only when revising earlier conclusions
+  branchFromThought?: number,    // Set with branchId to branch from a prior step
+  branchId?: string,             // Branch identifier (required when branching)
+  needsMoreThoughts: boolean     // true only when extending beyond totalThoughts
 }
 ```
 
 ### Response:
-Returns synthesized analysis from the multi-agent system with:
-- Processed thought analysis
-- Guidance for next steps
-- Branch and revision tracking
-- Status and metadata
+The tool returns both:
+- `content`: human-readable synthesis text
+- `structuredContent`: machine-readable loop control fields
+
+```typescript
+{
+  should_continue: boolean,      // Canonical continuation signal
+  next_thought_number: number?,  // Recommended next thoughtNumber
+  stop_reason: string,           // Why to continue/stop/retry
+  current_thought_number: number,
+  total_thoughts: number,
+  next_call_arguments?: {        // Suggested next-call arguments when applicable
+    thoughtNumber: number,
+    totalThoughts: number,
+    nextThoughtNeeded: boolean,
+    needsMoreThoughts: boolean
+  },
+  parameter_usage: Record<string, string>
+}
+```
+
+### Call Contract (Important)
+- Use this tool as a **multi-step loop**, not a one-shot call.
+- After every response, read `structuredContent.should_continue`.
+- Continue calling `sequentialthinking` until `should_continue` is `false`.
+- Actively use reflection: when a step is weak or incorrect, send a revision step with `isRevision=true`.
+- Prefer `structuredContent.next_thought_number` and `next_call_arguments` when building the next request.
 
 ## Installation
 
@@ -436,9 +380,9 @@ Open http://127.0.0.1:6274/ and test the `sequentialthinking` tool.
 
 ### Strengths:
 - **Multi-perspective analysis**: 6 different cognitive approaches
-- **AI-powered routing**: Intelligent complexity analysis
+- **AI-powered analysis**: Complexity metrics for observability
 - **Research capabilities**: 4 agents with web search (optional)
-- **Flexible processing**: Single to full sequence strategies
+- **Deterministic processing**: Fixed full multi-step sequence
 - **Model optimization**: Enhanced/Standard model selection
 - **Provider agnostic**: Works with multiple LLM providers
 

@@ -37,7 +37,7 @@ class WorkflowExecutor:
         """
         logger.info("Initializing Multi-Thinking Workflow Router")
         # Dynamic import to avoid circular dependency
-        from mcp_server_mas_sequential_thinking.routing import (  # noqa: PLC0415
+        from mcp_server_mas_sequential_thinking.routing import (
             MultiThinkingWorkflowRouter,
         )
 

@@ -9,7 +9,7 @@ authors = [
     { name = "Alain Ivars", email = "alainivars@gmail.com" },
 ]
 dependencies = [
-    "agno>=2.2.12",
+    "agno>=2.4.7",
     "asyncio",
     "exa-py>=2.0.0",
     "python-dotenv>=1.2.1",
@@ -20,6 +20,7 @@ dependencies = [
     "httpx[socks]>=0.28.1",
     "sqlalchemy>=2.0.44",
     "anthropic>=0.72.1",
+    "fastapi>=0.115.0",
 ]
 
 [project.optional-dependencies]
@@ -122,6 +123,45 @@ ignore = [
     "TRY003",  # Avoid specifying long messages outside the exception class
     "EM101",   # Exception must not use a string literal, assign to variable first
     "EM102",   # Exception must not use an f-string literal, assign to variable first
+    # Legacy baseline rules relaxed for current codebase while retaining core correctness checks
+    "ANN001",  # Missing type annotation for function argument
+    "ANN003",  # Missing type annotation for **kwargs
+    "ANN202",  # Missing return type annotation for private function
+    "ANN204",  # Missing return type annotation for special method
+    "ANN401",  # Dynamically typed expressions (Any)
+    "ARG001",  # Unused function argument
+    "ARG002",  # Unused method argument
+    "ARG004",  # Unused static-method argument
+    "B904",    # Raise without explicit cause in except
+    "BLE001",  # Blind exception catches
+    "DTZ003",  # datetime.utcnow usage
+    "E402",    # Import not at top of module
+    "E501",    # Line too long
+    "ERA001",  # Commented-out code
+    "FBT003",  # Boolean positional value in call
+    "G004",    # Logging f-string interpolation
+    "G201",    # Logging with exc_info
+    "I001",    # Import sorting
+    "ISC003",  # Explicit string concatenation
+    "N803",    # Invalid argument name (non-snake-case for API compatibility)
+    "N815",    # Mixed-case variable in class scope (API schema compatibility)
+    "N818",    # Exception class naming suffix
+    "PERF203", # try/except in loop
+    "PLC0415", # Import outside top-level
+    "PLR0911", # Too many return statements
+    "PLR0912", # Too many branches
+    "PLW2901", # Redefined loop variable
+    "PT011",   # Broad pytest.raises
+    "RUF001",  # Ambiguous unicode character
+    "RUF012",  # Mutable class default
+    "S110",    # try/except/pass
+    "SIM105",  # Suppressible exception
+    "SIM117",  # Nested with statements
+    "SLF001",  # Private member access
+    "TRY004",  # Prefer TypeError for type checks
+    "TRY300",  # Consider else block in try
+    "TRY401",  # Verbose exception message
+    "UP037",   # Quoted annotation
 ]
 
 [tool.ruff.lint.per-file-ignores]

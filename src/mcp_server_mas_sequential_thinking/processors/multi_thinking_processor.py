@@ -5,6 +5,8 @@ integrated with the Agno Workflow system. Supports intelligent parallel processi
 from single direction to full multi-direction analysis.
 """
 
+from __future__ import annotations
+
 # Lazy import to break circular dependency
 import logging
 import time
@@ -13,10 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 from agno.workflow.types import StepOutput
 
-if TYPE_CHECKING:
-    from mcp_server_mas_sequential_thinking.core.models import ThoughtData
-
-logger = logging.getLogger(__name__)
 from mcp_server_mas_sequential_thinking.config.modernized_config import get_model_config
 from mcp_server_mas_sequential_thinking.routing.multi_thinking_router import (
     MultiThinkingIntelligentRouter,
@@ -28,6 +26,17 @@ from .multi_thinking_core import (
     ProcessingDepth,
     ThinkingDirection,
 )
+
+if TYPE_CHECKING:
+    from mcp_server_mas_sequential_thinking.core.models import ThoughtData
+    from mcp_server_mas_sequential_thinking.routing.complexity_types import (
+        ComplexityMetrics,
+    )
+    from mcp_server_mas_sequential_thinking.routing.workflow_state import (
+        MultiThinkingState,
+    )
+
+logger = logging.getLogger(__name__)
 
 # Message History Configuration (Agno 2.2.12+ optimization)
 # Defines optimal context window size for each thinking direction to reduce token usage
@@ -63,8 +72,106 @@ class MultiThinkingSequentialProcessor:
         self.thinking_factory = MultiThinkingAgentFactory()
         self.router = MultiThinkingIntelligentRouter()
 
+    def _build_event_handler(
+        self,
+        state: "MultiThinkingState" | None,
+        agent_name: str,
+    ):
+        if state is None:
+            return None
+
+        def handle_event(event: Any) -> None:
+            event_name = event.__class__.__name__
+            if event_name == "ModelRequestCompleted":
+                self._record_token_usage_from_payload(state, agent_name, event)
+
+        return handle_event
+
+    async def _execute_agent(
+        self,
+        agent: Any,
+        agent_name: str,
+        input_text: str,
+        history_limit: int,
+        state: "MultiThinkingState" | None,
+    ) -> str:
+        if state is not None:
+            state.mark_agent_started(agent_name)
+
+        start_time = time.time()
+        try:
+            event_handler = self._build_event_handler(state, agent_name)
+            if event_handler is None:
+                result = await agent.arun(
+                    input=input_text, num_history_messages=history_limit
+                )
+            else:
+                result = await agent.arun(
+                    input=input_text,
+                    num_history_messages=history_limit,
+                    on_event=event_handler,
+                )
+            content = self._extract_content(result)
+            if state is not None:
+                state.mark_agent_completed(
+                    agent_name, content, time.time() - start_time
+                )
+            return content
+        except Exception as exc:
+            if state is not None:
+                state.mark_agent_failed(agent_name, str(exc))
+            raise
+
+    @staticmethod
+    def _record_token_usage_from_payload(
+        state: "MultiThinkingState" | None,
+        agent_name: str,
+        payload: Any,
+    ) -> None:
+        if state is None:
+            return
+
+        input_tokens = None
+        output_tokens = None
+
+        metrics = None
+        for attr in ("metrics", "usage", "token_usage"):
+            metrics = getattr(payload, attr, None)
+            if metrics is not None:
+                break
+
+        if metrics is not None:
+            input_tokens = getattr(metrics, "input_tokens", None)
+            output_tokens = getattr(metrics, "output_tokens", None)
+            if input_tokens is None:
+                input_tokens = getattr(metrics, "prompt_tokens", None)
+            if output_tokens is None:
+                output_tokens = getattr(metrics, "completion_tokens", None)
+
+        if input_tokens is None:
+            input_tokens = getattr(payload, "input_tokens", None)
+            if input_tokens is None:
+                input_tokens = getattr(payload, "prompt_tokens", None)
+
+        if output_tokens is None:
+            output_tokens = getattr(payload, "output_tokens", None)
+            if output_tokens is None:
+                output_tokens = getattr(payload, "completion_tokens", None)
+
+        if input_tokens is None and output_tokens is None:
+            return
+
+        state.record_token_usage(
+            agent_name, int(input_tokens or 0), int(output_tokens or 0)
+        )
+
     async def process_with_multi_thinking(
-        self, thought_data: "ThoughtData", context_prompt: str = ""
+        self,
+        thought_data: "ThoughtData",
+        context_prompt: str = "",
+        state: "MultiThinkingState" | None = None,
+        forced_strategy_name: str | None = None,
+        complexity_metrics: ComplexityMetrics | None = None,
     ) -> MultiThinkingProcessingResult:
         """Process thoughts using multi-thinking methodology with parallel execution."""
         start_time = time.time()
@@ -74,9 +181,24 @@ class MultiThinkingSequentialProcessor:
             logger.info("Input preview: %s", thought_data.thought[:100])
             logger.info("Context length: %d chars", len(context_prompt))
 
+        if forced_strategy_name is not None and forced_strategy_name != "full_exploration":
+            return self._build_error_result(
+                "Unsupported strategy. Only 'full_exploration' is allowed.",
+                start_time,
+            )
+
         try:
             # Step 1: Intelligent routing decision
-            routing_decision = await self.router.route_thought(thought_data)
+            if forced_strategy_name:
+                routing_decision = await self.router.route_thought_with_strategy(
+                    thought_data,
+                    forced_strategy_name,
+                    complexity_metrics=complexity_metrics,
+                )
+            else:
+                routing_decision = await self.router.route_thought(
+                    thought_data, complexity_metrics=complexity_metrics
+                )
 
             logger.info("Selected strategy: %s", routing_decision.strategy.name)
             if logger.isEnabledFor(logging.INFO):
@@ -86,23 +208,15 @@ class MultiThinkingSequentialProcessor:
                 ]
                 logger.info("Thinking sequence: %s", sequence)
 
-            # Step 2: Execute processing based on complexity
-            if routing_decision.strategy.complexity == ProcessingDepth.SINGLE:
-                result = await self._process_single_direction(
-                    thought_data, context_prompt, routing_decision
+            # Step 2: Always execute full-sequence processing.
+            if routing_decision.strategy.complexity != ProcessingDepth.FULL:
+                return self._build_error_result(
+                    "Routing returned unsupported complexity mode. FULL is required.",
+                    start_time,
                 )
-            elif routing_decision.strategy.complexity == ProcessingDepth.DOUBLE:
-                result = await self._process_double_direction_sequence(
-                    thought_data, context_prompt, routing_decision
-                )
-            elif routing_decision.strategy.complexity == ProcessingDepth.TRIPLE:
-                result = await self._process_triple_direction_sequence(
-                    thought_data, context_prompt, routing_decision
-                )
-            else:  # FULL
-                result = await self._process_full_direction_sequence(
-                    thought_data, context_prompt, routing_decision
-                )
+            result = await self._process_full_direction_sequence(
+                thought_data, context_prompt, routing_decision, state
+            )
 
             processing_time = time.time() - start_time
 
@@ -131,253 +245,35 @@ class MultiThinkingSequentialProcessor:
             return final_result
 
         except Exception as e:
-            processing_time = time.time() - start_time
-            logger.exception(
-                f"Multi-thinking processing failed after {processing_time:.3f}s: {e}"
+            error_message = (
+                f"Multi-thinking processing failed due to unexpected error: {e!s}"
             )
+            logger.exception(error_message)
+            return self._build_error_result(error_message, start_time)
 
-            return MultiThinkingProcessingResult(
-                content=f"Multi-thinking processing failed: {e!s}",
-                strategy_used="error_fallback",
-                thinking_sequence=[],
-                processing_time=processing_time,
-                complexity_score=0.0,
-                cost_reduction=0.0,
-                individual_results={},
-                step_name="error_handling",
-            )
-
-    async def _process_single_direction(
-        self, thought_data: "ThoughtData", context: str, decision: RoutingDecision
-    ) -> dict[str, Any]:
-        """Process single thinking direction mode."""
-        thinking_direction = decision.strategy.thinking_sequence[0]
-        logger.info(f"  SINGLE THINKING MODE: {thinking_direction.value}")
-
-        # Use enhanced model for synthesis thinking, standard model for other directions
-        if thinking_direction == ThinkingDirection.SYNTHESIS:
-            model = self.model_config.create_enhanced_model()
-            logger.info("    Using enhanced model for synthesis thinking")
-        else:
-            model = self.model_config.create_standard_model()
-            logger.info("    Using standard model for focused thinking")
-
-        agent = self.thinking_factory.create_thinking_agent(
-            thinking_direction, model, context, {}
+    def _build_error_result(
+        self, error_message: str, start_time: float
+    ) -> MultiThinkingProcessingResult:
+        """Build a standardized error result for failed processing runs."""
+        processing_time = time.time() - start_time
+        logger.error("%s (%.3fs)", error_message, processing_time)
+        return MultiThinkingProcessingResult(
+            content=f"Multi-thinking processing failed: {error_message}",
+            strategy_used="error_fallback",
+            thinking_sequence=[],
+            processing_time=processing_time,
+            complexity_score=0.0,
+            cost_reduction=0.0,
+            individual_results={},
+            step_name="error_handling",
         )
-
-        # Execute processing with optimized message history
-        history_limit = MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5)
-        logger.info(
-            f"    Using {history_limit} message history for {thinking_direction.value}"
-        )
-        result = await agent.arun(
-            input=thought_data.thought, num_history_messages=history_limit
-        )
-
-        # Extract content
-        content = self._extract_content(result)
-
-        return {
-            "final_content": content,
-            "individual_results": {thinking_direction.value: content},
-        }
-
-    async def _process_double_direction_sequence(
-        self, thought_data: "ThoughtData", context: str, decision: RoutingDecision
-    ) -> dict[str, Any]:
-        """Process dual thinking direction sequence with parallel execution."""
-        thinking_sequence = decision.strategy.thinking_sequence
-        direction1: ThinkingDirection = thinking_sequence[0]
-        direction2: ThinkingDirection = thinking_sequence[1]
-        logger.info(
-            f"  DUAL THINKING SEQUENCE: {direction1.value} + {direction2.value} (parallel)"
-        )
-
-        individual_results = {}
-
-        # Check if synthesis agent is involved
-        has_synthesis = any(
-            d == ThinkingDirection.SYNTHESIS for d in [direction1, direction2]
-        )
-
-        if has_synthesis:
-            # If synthesis is involved, run non-synthesis agents in parallel, then synthesis
-            non_synthesis_directions = [
-                d for d in [direction1, direction2] if d != ThinkingDirection.SYNTHESIS
-            ]
-            synthesis_direction = ThinkingDirection.SYNTHESIS
-
-            # Run non-synthesis agents in parallel
-            import asyncio
-
-            tasks = []
-            for direction in non_synthesis_directions:
-                model = self.model_config.create_standard_model()
-                history_limit = MESSAGE_HISTORY_CONFIG.get(direction, 5)
-                logger.info(
-                    f"    Using standard model for {direction.value} thinking (parallel, history={history_limit})"
-                )
-
-                agent = self.thinking_factory.create_thinking_agent(
-                    direction, model, context, {}
-                )
-                task = agent.arun(
-                    input=thought_data.thought, num_history_messages=history_limit
-                )
-                tasks.append((direction, task))
-
-            # Execute parallel tasks
-            logger.info(f"    Executing {len(tasks)} thinking agents in parallel")
-            parallel_results = await asyncio.gather(*[task for _, task in tasks])
-
-            # Process parallel results
-            for (direction, _), result in zip(tasks, parallel_results, strict=False):
-                content = self._extract_content(result)
-                individual_results[direction.value] = content
-                logger.info(f"    {direction.value} thinking completed (parallel)")
-
-            # Run synthesis agent with all parallel results
-            model = self.model_config.create_enhanced_model()
-            logger.info(
-                f"    Using enhanced model for {synthesis_direction.value} synthesis"
-            )
-
-            synthesis_agent = self.thinking_factory.create_thinking_agent(
-                synthesis_direction, model, context, individual_results
-            )
-
-            # Build synthesis input
-            synthesis_input = self._build_synthesis_integration_input(
-                thought_data.thought, individual_results
-            )
-
-            # Synthesis needs more context for integration
-            synthesis_history_limit = MESSAGE_HISTORY_CONFIG.get(
-                ThinkingDirection.SYNTHESIS, 10
-            )
-            logger.info(
-                f"    Using {synthesis_history_limit} message history for synthesis"
-            )
-
-            synthesis_result = await synthesis_agent.arun(
-                input=synthesis_input, num_history_messages=synthesis_history_limit
-            )
-            synthesis_content = self._extract_content(synthesis_result)
-            individual_results[synthesis_direction.value] = synthesis_content
-
-            logger.info(f"    {synthesis_direction.value} thinking completed")
-
-            final_content = synthesis_content
-        else:
-            # No synthesis agent - run both agents in parallel
-            import asyncio
-
-            tasks = []
-
-            for direction in [direction1, direction2]:
-                model = self.model_config.create_standard_model()
-                history_limit = MESSAGE_HISTORY_CONFIG.get(direction, 5)
-                logger.info(
-                    f"    Using standard model for {direction.value} thinking (parallel, history={history_limit})"
-                )
-
-                agent = self.thinking_factory.create_thinking_agent(
-                    direction, model, context, {}
-                )
-                task = agent.arun(
-                    input=thought_data.thought, num_history_messages=history_limit
-                )
-                tasks.append((direction, task))
-
-            # Execute parallel tasks
-            logger.info("    Executing 2 thinking agents in parallel")
-            parallel_results = await asyncio.gather(*[task for _, task in tasks])
-
-            # Process parallel results
-            for (direction, _), result in zip(tasks, parallel_results, strict=False):
-                content = self._extract_content(result)
-                individual_results[direction.value] = content
-                logger.info(f"    {direction.value} thinking completed (parallel)")
-
-            # Combine results programmatically
-            final_content = self._combine_dual_thinking_results(
-                direction1,
-                individual_results[direction1.value],
-                direction2,
-                individual_results[direction2.value],
-                thought_data.thought,
-            )
-
-        return {
-            "final_content": final_content,
-            "individual_results": individual_results,
-        }
-
-    async def _process_triple_direction_sequence(
-        self, thought_data: "ThoughtData", context: str, decision: RoutingDecision
-    ) -> dict[str, Any]:
-        """Process triple thinking direction sequence with parallel execution."""
-        thinking_sequence = decision.strategy.thinking_sequence
-        logger.info(
-            f"  TRIPLE THINKING SEQUENCE: {' + '.join(direction.value for direction in thinking_sequence)} (parallel)"
-        )
-
-        individual_results = {}
-
-        # Triple strategy currently uses FACTUAL + CREATIVE + CRITICAL - all run in parallel
-        import asyncio
-
-        tasks = []
-
-        for thinking_direction in thinking_sequence:
-            logger.info(
-                f"    Preparing {thinking_direction.value} thinking for parallel execution"
-            )
-
-            # All agents use standard model (no synthesis in triple strategy)
-            model = self.model_config.create_standard_model()
-            logger.info(
-                f"      Using standard model for {thinking_direction.value} thinking"
-            )
-
-            agent = self.thinking_factory.create_thinking_agent(
-                thinking_direction, model, context, {}
-            )
-
-            # All agents receive original input directly (parallel processing)
-            task = agent.arun(
-                input=thought_data.thought,
-                num_history_messages=MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5),
-            )
-            tasks.append((thinking_direction, task))
-
-        # Execute all thinking directions in parallel
-        logger.info(f"    Executing {len(tasks)} thinking agents in parallel")
-        parallel_results = await asyncio.gather(*[task for _, task in tasks])
-
-        # Process parallel results
-        for (thinking_direction, _), result in zip(
-            tasks, parallel_results, strict=False
-        ):
-            content = self._extract_content(result)
-            individual_results[thinking_direction.value] = content
-            logger.info(
-                f"      {thinking_direction.value} thinking completed (parallel)"
-            )
-
-        # Create programmatic synthesis (no synthesis agent in triple strategy)
-        final_content = self._synthesize_triple_thinking_results(
-            individual_results, thinking_sequence, thought_data.thought
-        )
-
-        return {
-            "final_content": final_content,
-            "individual_results": individual_results,
-        }
 
     async def _process_full_direction_sequence(
-        self, thought_data: "ThoughtData", context: str, decision: RoutingDecision
+        self,
+        thought_data: "ThoughtData",
+        context: str,
+        decision: RoutingDecision,
+        state: "MultiThinkingState" | None,
     ) -> dict[str, Any]:
         """Process full multi-thinking direction sequence with parallel execution."""
         thinking_sequence = decision.strategy.thinking_sequence
@@ -398,13 +294,13 @@ class MultiThinkingSequentialProcessor:
                 ThinkingDirection.SYNTHESIS, initial_synthesis_model, context, {}
             )
 
-            initial_result = await initial_synthesis_agent.arun(
-                num_history_messages=MESSAGE_HISTORY_CONFIG.get(
-                    ThinkingDirection.SYNTHESIS, 10
-                ),
-                input=thought_data.thought,
+            initial_content = await self._execute_agent(
+                initial_synthesis_agent,
+                "synthesis_initial",
+                thought_data.thought,
+                MESSAGE_HISTORY_CONFIG.get(ThinkingDirection.SYNTHESIS, 10),
+                state,
             )
-            initial_content = self._extract_content(initial_result)
             individual_results["synthesis_initial"] = initial_content
 
             logger.info("      Initial orchestration completed")
@@ -423,7 +319,7 @@ class MultiThinkingSequentialProcessor:
 
             import asyncio
 
-            tasks = []
+            tasks: list[tuple[ThinkingDirection, Any]] = []
 
             for thinking_direction in non_synthesis_agents:
                 logger.info(
@@ -440,11 +336,12 @@ class MultiThinkingSequentialProcessor:
                 )
 
                 # All non-synthesis agents receive original input (parallel processing)
-                task = agent.arun(
-                    input=thought_data.thought,
-                    num_history_messages=MESSAGE_HISTORY_CONFIG.get(
-                        thinking_direction, 5
-                    ),
+                task = self._execute_agent(
+                    agent,
+                    thinking_direction.value,
+                    thought_data.thought,
+                    MESSAGE_HISTORY_CONFIG.get(thinking_direction, 5),
+                    state,
                 )
                 tasks.append((thinking_direction, task))
 
@@ -453,13 +350,13 @@ class MultiThinkingSequentialProcessor:
             parallel_results = await asyncio.gather(*[task for _, task in tasks])
 
             # Process parallel results
-            for (thinking_direction, _), result in zip(
+            for (completed_direction, _), content in zip(
                 tasks, parallel_results, strict=False
             ):
-                content = self._extract_content(result)
-                individual_results[thinking_direction.value] = content
+                individual_results[completed_direction.value] = content
                 logger.info(
-                    f"        {thinking_direction.value} thinking completed (parallel)"
+                    "        %s thinking completed (parallel)",
+                    completed_direction.value,
                 )
 
         # Step 3: Final SYNTHESIS for integration (if last agent is SYNTHESIS)
@@ -494,13 +391,13 @@ class MultiThinkingSequentialProcessor:
                 thought_data.thought, integration_results
             )
 
-            final_result = await final_synthesis_agent.arun(
-                num_history_messages=MESSAGE_HISTORY_CONFIG.get(
-                    ThinkingDirection.SYNTHESIS, 10
-                ),
-                input=synthesis_input,
+            final_content = await self._execute_agent(
+                final_synthesis_agent,
+                "synthesis_final",
+                synthesis_input,
+                MESSAGE_HISTORY_CONFIG.get(ThinkingDirection.SYNTHESIS, 10),
+                state,
             )
-            final_content = self._extract_content(final_result)
             individual_results["synthesis_final"] = final_content
 
             logger.info("      Final synthesis integration completed")
@@ -528,31 +425,6 @@ class MultiThinkingSequentialProcessor:
         if isinstance(result, str):
             return result.strip()
         return str(result).strip()
-
-    def _build_sequential_input(
-        self,
-        original_thought: str,
-        previous_results: dict[str, str],
-        current_direction: ThinkingDirection,
-    ) -> str:
-        """Build input for sequential processing."""
-        input_parts = [f"Original thought: {original_thought}", ""]
-
-        if previous_results:
-            input_parts.append("Previous analysis perspectives:")
-            for direction_name, content in previous_results.items():
-                # Use generic descriptions instead of specific direction names
-                perspective_name = self._get_generic_perspective_name(direction_name)
-                input_parts.append(
-                    f"  {perspective_name}: {content[:200]}{'...' if len(content) > 200 else ''}"
-                )
-            input_parts.append("")
-
-        # Use generic instruction instead of direction-specific instruction
-        thinking_style = self._get_thinking_style_instruction(current_direction)
-        input_parts.append(f"Now analyze this from a {thinking_style} perspective.")
-
-        return "\n".join(input_parts)
 
     def _build_synthesis_integration_input(
         self, original_thought: str, all_results: dict[str, str]
@@ -590,63 +462,6 @@ class MultiThinkingSequentialProcessor:
 
         return "\n".join(input_parts)
 
-    def _combine_dual_thinking_results(
-        self,
-        direction1: ThinkingDirection,
-        content1: str,
-        direction2: ThinkingDirection,
-        content2: str,
-        original_thought: str,
-    ) -> str:
-        """Combine dual thinking direction results."""
-        # If the second is synthesis thinking, return its result directly (should already be synthesized)
-        if direction2 == ThinkingDirection.SYNTHESIS:
-            return content2
-
-        # Otherwise create synthesized answer without mentioning analysis methods
-        if (
-            direction1 == ThinkingDirection.FACTUAL
-            and direction2 == ThinkingDirection.EMOTIONAL
-        ):
-            return f"Regarding '{original_thought}': A comprehensive analysis reveals both objective realities and human emotional responses. {content1.lower()} while also recognizing that {content2.lower()} These complementary insights suggest a balanced approach that considers both factual evidence and human experience."
-        if (
-            direction1 == ThinkingDirection.CRITICAL
-            and direction2 == ThinkingDirection.OPTIMISTIC
-        ):
-            return f"Considering '{original_thought}': A thorough evaluation identifies both important concerns and significant opportunities. {content1.lower().strip('.')} while also recognizing promising aspects: {content2.lower()} A measured approach would address the concerns while pursuing the benefits."
-        # Generic synthesis, completely hiding analysis structure
-        return f"Analyzing '{original_thought}': A comprehensive evaluation reveals multiple important insights. {content1.lower().strip('.')} Additionally, {content2.lower()} Integrating these findings provides a well-rounded understanding that addresses the question from multiple angles."
-
-    def _synthesize_triple_thinking_results(
-        self,
-        results: dict[str, str],
-        thinking_sequence: list[ThinkingDirection],
-        original_thought: str,
-    ) -> str:
-        """Synthesize triple thinking direction results."""
-        # Create truly synthesized answer, hiding all analysis structure
-        content_pieces = []
-        for thinking_direction in thinking_sequence:
-            direction_name = thinking_direction.value
-            content = results.get(direction_name, "")
-            if content:
-                # Extract core insights, completely hiding sources
-                clean_content = content.strip().rstrip(".!")
-                content_pieces.append(clean_content)
-
-        if len(content_pieces) >= 3:
-            # Synthesis of three or more perspectives, completely unified
-            return f"""Considering the question '{original_thought}', a comprehensive analysis reveals several crucial insights.
-
-{content_pieces[0].lower()}, which establishes the foundation for understanding. This leads to recognizing that {content_pieces[1].lower()}, adding essential depth to our comprehension. Furthermore, {content_pieces[2].lower() if len(content_pieces) > 2 else ""}
-
-Drawing these insights together, the answer emerges as a unified understanding that acknowledges the full complexity while providing clear guidance."""
-        if len(content_pieces) == 2:
-            return f"Addressing '{original_thought}': A thorough evaluation shows that {content_pieces[0].lower()}, and importantly, {content_pieces[1].lower()} Together, these insights form a comprehensive understanding."
-        if len(content_pieces) == 1:
-            return f"Regarding '{original_thought}': {content_pieces[0]}"
-        return f"After comprehensive consideration of '{original_thought}', the analysis suggests this question merits deeper exploration to provide a complete answer."
-
     def _synthesize_full_thinking_results(
         self,
         results: dict[str, str],
@@ -654,30 +469,37 @@ Drawing these insights together, the answer emerges as a unified understanding t
         original_thought: str,
     ) -> str:
         """Synthesize full multi-thinking results."""
-        # If there's a synthesis result, use it preferentially
+        _ = thinking_sequence
         synthesis_result = results.get("synthesis")
         if synthesis_result:
             return synthesis_result
 
-        # Otherwise create synthesis
-        return self._synthesize_triple_thinking_results(
-            results, thinking_sequence, original_thought
+        if not results:
+            return (
+                f"After full multi-thinking analysis of '{original_thought}', "
+                "no stable synthesis output was produced."
+            )
+
+        perspectives = []
+        for direction_name, content in results.items():
+            if not content:
+                continue
+            perspective = self._get_generic_perspective_name(direction_name)
+            perspectives.append(f"{perspective}: {content}")
+
+        if not perspectives:
+            return (
+                f"After full multi-thinking analysis of '{original_thought}', "
+                "all perspective outputs were empty."
+            )
+
+        return (
+            f"Integrated response for '{original_thought}':\n\n"
+            + "\n".join(f"- {item}" for item in perspectives)
         )
 
-    def _get_thinking_contribution(self, thinking_direction: ThinkingDirection) -> str:
-        """Get thinking direction contribution description."""
-        contributions = {
-            ThinkingDirection.FACTUAL: "factual information and objective data",
-            ThinkingDirection.EMOTIONAL: "emotional insights and intuitive responses",
-            ThinkingDirection.CRITICAL: "critical analysis and risk assessment",
-            ThinkingDirection.OPTIMISTIC: "positive possibilities and value identification",
-            ThinkingDirection.CREATIVE: "creative alternatives and innovative solutions",
-            ThinkingDirection.SYNTHESIS: "process management and integrated thinking",
-        }
-        return contributions.get(thinking_direction, "specialized thinking")
-
     def _get_generic_perspective_name(self, direction_name: str) -> str:
-        """Get generic analysis type name for thinking direction, hiding direction concepts."""
+        """Get generic analysis type name for thinking direction."""
         name_mapping = {
             "factual": "Factual analysis",
             "emotional": "Emotional considerations",
@@ -688,20 +510,6 @@ Drawing these insights together, the answer emerges as a unified understanding t
         }
         return name_mapping.get(direction_name.lower(), "Analysis")
 
-    def _get_thinking_style_instruction(
-        self, thinking_direction: ThinkingDirection
-    ) -> str:
-        """Get thinking style instruction, avoiding mention of direction concepts."""
-        style_mapping = {
-            ThinkingDirection.FACTUAL: "factual and objective",
-            ThinkingDirection.EMOTIONAL: "emotional and intuitive",
-            ThinkingDirection.CRITICAL: "critical and cautious",
-            ThinkingDirection.OPTIMISTIC: "positive and optimistic",
-            ThinkingDirection.CREATIVE: "creative and innovative",
-            ThinkingDirection.SYNTHESIS: "strategic and integrative",
-        }
-        return style_mapping.get(thinking_direction, "analytical")
-
 
 # Create global processor instance
 _multi_thinking_processor = MultiThinkingSequentialProcessor()
@@ -709,11 +517,19 @@ _multi_thinking_processor = MultiThinkingSequentialProcessor()
 
 # Convenience function
 async def process_with_multi_thinking(
-    thought_data: "ThoughtData", context: str = ""
+    thought_data: "ThoughtData",
+    context: str = "",
+    state: "MultiThinkingState" | None = None,
+    forced_strategy_name: str | None = None,
+    complexity_metrics: ComplexityMetrics | None = None,
 ) -> MultiThinkingProcessingResult:
     """Convenience function for processing thoughts using multi-thinking directions."""
     return await _multi_thinking_processor.process_with_multi_thinking(
-        thought_data, context
+        thought_data,
+        context,
+        state=state,
+        forced_strategy_name=forced_strategy_name,
+        complexity_metrics=complexity_metrics,
     )
 
 

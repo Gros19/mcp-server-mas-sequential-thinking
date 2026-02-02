@@ -225,29 +225,39 @@ class RateLimiter:
         await self._check_concurrent_limit()
 
         # Check token bucket (burst protection)
-        if not await RateLimiter._global_token_bucket.consume():
-            wait_time = RateLimiter._global_token_bucket.get_wait_time()
+        token_bucket = RateLimiter._global_token_bucket
+        minute_counter = RateLimiter._global_minute_counter
+        hour_counter = RateLimiter._global_hour_counter
+        if token_bucket is None or minute_counter is None or hour_counter is None:
+            self._initialize_global_limiters()
+            token_bucket = RateLimiter._global_token_bucket
+            minute_counter = RateLimiter._global_minute_counter
+            hour_counter = RateLimiter._global_hour_counter
+
+        if token_bucket is None or minute_counter is None or hour_counter is None:
+            raise RuntimeError("Rate limiter globals failed to initialize")
+
+        if not await token_bucket.consume():
+            wait_time = token_bucket.get_wait_time()
             raise RateLimitExceeded("burst", wait_time)
 
         # Check per-minute limit
-        minute_count = await RateLimiter._global_minute_counter.get_count()
+        minute_count = await minute_counter.get_count()
         if minute_count >= self.config.max_requests_per_minute:
-            oldest_age = (
-                await RateLimiter._global_minute_counter.get_oldest_request_age()
-            )
+            oldest_age = await minute_counter.get_oldest_request_age()
             wait_time = max(0.0, 60.0 - oldest_age)
             raise RateLimitExceeded("per_minute", wait_time)
 
         # Check per-hour limit
-        hour_count = await RateLimiter._global_hour_counter.get_count()
+        hour_count = await hour_counter.get_count()
         if hour_count >= self.config.max_requests_per_hour:
-            oldest_age = await RateLimiter._global_hour_counter.get_oldest_request_age()
+            oldest_age = await hour_counter.get_oldest_request_age()
             wait_time = max(0.0, 3600.0 - oldest_age)
             raise RateLimitExceeded("per_hour", wait_time)
 
         # Record the request
-        await RateLimiter._global_minute_counter.add_request()
-        await RateLimiter._global_hour_counter.add_request()
+        await minute_counter.add_request()
+        await hour_counter.add_request()
 
         logger.debug(
             f"Rate limit check passed for {client_id}: "

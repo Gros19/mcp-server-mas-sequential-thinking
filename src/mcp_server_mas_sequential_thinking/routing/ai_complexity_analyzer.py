@@ -6,11 +6,15 @@ with more nuanced understanding of context, semantics, and depth.
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from agno.agent import Agent
 
 from mcp_server_mas_sequential_thinking.config.modernized_config import get_model_config
+from mcp_server_mas_sequential_thinking.infrastructure.learning_resources import (
+    create_learning_resources,
+)
 
 from .complexity_types import ComplexityAnalyzer, ComplexityMetrics
 
@@ -91,18 +95,40 @@ Analyze now:
 class AIComplexityAnalyzer(ComplexityAnalyzer):
     """AI-powered complexity analyzer using language models."""
 
-    def __init__(self, model_config: Any | None = None) -> None:
+    def __init__(
+        self,
+        model_config: Any | None = None,
+        learning_machine: Any | None = None,
+        learning_db: Any | None = None,
+    ) -> None:
         self.model_config = model_config or get_model_config()
+        self._learning_machine = learning_machine
+        self._learning_db = learning_db
         self._agent: Agent | None = None
+
+    def _ensure_learning_resources(self) -> tuple[Any, Any]:
+        if self._learning_machine is None or self._learning_db is None:
+            resources = create_learning_resources()
+            if self._learning_machine is None:
+                self._learning_machine = resources.learning_machine
+            if self._learning_db is None:
+                self._learning_db = resources.db
+        return self._learning_machine, self._learning_db
 
     def _get_agent(self) -> Agent:
         """Lazy initialization of the analysis agent."""
         if self._agent is None:
-            model = self.model_config.create_agent_model()
+            if hasattr(self.model_config, "create_agent_model"):
+                model = self.model_config.create_agent_model()
+            else:
+                model = self.model_config.create_enhanced_model()
+            learning_machine, learning_db = self._ensure_learning_resources()
             self._agent = Agent(
                 name="ComplexityAnalyzer",
                 model=model,
                 introduction="You are an expert in cognitive complexity assessment, specializing in philosophy and deep thinking analysis.",
+                learning=learning_machine,
+                db=learning_db,
             )
         return self._agent
 
@@ -132,28 +158,28 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
                 complexity_score=self._validate_numeric_field(
                     complexity_data.get("complexity_score"), 0.0, 100.0, 0.0
                 ),
-                word_count=self._validate_numeric_field(
+                word_count=self._validate_int_field(
                     complexity_data.get("word_count"), 0, 10000, 0
                 ),
-                sentence_count=self._validate_numeric_field(
+                sentence_count=self._validate_int_field(
                     complexity_data.get("sentence_count"), 0, 1000, 0
                 ),
-                question_count=self._validate_numeric_field(
+                question_count=self._validate_int_field(
                     complexity_data.get("question_count"), 0, 100, 0
                 ),
-                technical_terms=self._validate_numeric_field(
+                technical_terms=self._validate_int_field(
                     complexity_data.get("technical_terms"), 0, 100, 0
                 ),
-                branching_references=self._validate_numeric_field(
+                branching_references=self._validate_int_field(
                     complexity_data.get("branching_references"), 0, 50, 0
                 ),
-                research_indicators=self._validate_numeric_field(
+                research_indicators=self._validate_int_field(
                     complexity_data.get("research_indicators"), 0, 50, 0
                 ),
-                analysis_depth=self._validate_numeric_field(
+                analysis_depth=self._validate_int_field(
                     complexity_data.get("analysis_depth"), 0, 100, 0
                 ),
-                philosophical_depth_boost=self._validate_numeric_field(
+                philosophical_depth_boost=self._validate_int_field(
                     complexity_data.get("philosophical_depth_boost"), 0, 15, 0
                 ),
                 # AI Analysis Results (critical for routing) - validated
@@ -187,8 +213,6 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
 
     def _sanitize_thought_for_analysis(self, thought: str) -> str:
         """Sanitize thought text for secure inclusion in AI prompts."""
-        import re
-
         # Remove any potential prompt injection patterns
         sanitized = thought.replace('"', '\\"')  # Escape quotes
         sanitized = re.sub(r"[{}]", "", sanitized)  # Remove curly braces
@@ -272,6 +296,12 @@ class AIComplexityAnalyzer(ComplexityAnalyzer):
         except (ValueError, TypeError):
             logger.warning(f"Invalid numeric value: {value}, using default: {default}")
             return default
+
+    def _validate_int_field(
+        self, value: Any, min_val: int, max_val: int, default: int
+    ) -> int:
+        """Validate integer field with bounds and safe fallback."""
+        return int(self._validate_numeric_field(value, min_val, max_val, default))
 
     def _validate_problem_type(self, problem_type: str) -> str:
         """Validate problem type against allowed values."""

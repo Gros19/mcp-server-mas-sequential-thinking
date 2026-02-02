@@ -10,22 +10,36 @@ import os
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from agno.agent import Agent
 from agno.models.base import Model
 from agno.tools.reasoning import ReasoningTools
 
+from mcp_server_mas_sequential_thinking.infrastructure.learning_resources import (
+    LearningResources,
+    create_learning_resources,
+)
+
 # Try to import ExaTools, gracefully handle if not available
 try:
-    from agno.tools.exa import ExaTools
+    from agno.tools.exa import ExaTools as _ExaTools
 
+    ExaTools: type[Any] | None = _ExaTools
     EXA_AVAILABLE = bool(os.environ.get("EXA_API_KEY"))
 except ImportError:
     ExaTools = None
     EXA_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+
+def _is_truthy_env(name: str, default: bool = False) -> bool:
+    """Parse boolean feature flags from environment variables."""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class ThinkingDirection(Enum):
@@ -108,8 +122,10 @@ class ThinkingCapability:
 
     def __post_init__(self):
         if self.tools is None:
-            # Default tools for all thinking directions
-            tools = [ReasoningTools]
+            tools: list[Any] = []
+
+            if self.thinking_direction == ThinkingDirection.SYNTHESIS:
+                tools.append(ReasoningTools(add_instructions=True))
 
             # Add ExaTools for all thinking directions except SYNTHESIS
             if (
@@ -117,7 +133,7 @@ class ThinkingCapability:
                 and ExaTools is not None
                 and self.thinking_direction != ThinkingDirection.SYNTHESIS
             ):
-                tools.append(ExaTools)
+                tools.append(ExaTools())
 
             object.__setattr__(self, "tools", tools)
 
@@ -516,9 +532,31 @@ class MultiThinkingAgentFactory:
         ThinkingDirection.CREATIVE: CreativeThinkingCapability(),
         ThinkingDirection.SYNTHESIS: SynthesisThinkingCapability(),
     }
+    _default_learning_resources: ClassVar[LearningResources | None] = None
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        learning_machine: Any | None = None,
+        learning_db: Any | None = None,
+    ) -> None:
         self._agent_cache: dict[str, Agent] = {}  # Cache for created agents
+        self._learning_machine = learning_machine
+        self._learning_db = learning_db
+
+    @classmethod
+    def _get_default_learning_resources(cls) -> LearningResources:
+        if cls._default_learning_resources is None:
+            cls._default_learning_resources = create_learning_resources()
+        return cls._default_learning_resources
+
+    def _ensure_learning_resources(self) -> tuple[Any, Any]:
+        if self._learning_machine is None or self._learning_db is None:
+            resources = self._get_default_learning_resources()
+            if self._learning_machine is None:
+                self._learning_machine = resources.learning_machine
+            if self._learning_db is None:
+                self._learning_db = resources.db
+        return self._learning_machine, self._learning_db
 
     def create_thinking_agent(
         self,
@@ -542,6 +580,23 @@ class MultiThinkingAgentFactory:
             agent.instructions = capability.get_instructions(context, previous_results)
             return agent
 
+        learning_machine, learning_db = self._ensure_learning_resources()
+        culture_learning_enabled = _is_truthy_env(
+            "SEQUENTIAL_THINKING_ENABLE_CULTURE_LEARNING",
+            default=False,
+        )
+
+        learning_override = kwargs.pop("learning", learning_machine)
+        db_override = kwargs.pop("db", learning_db)
+        add_culture_to_context = kwargs.pop(
+            "add_culture_to_context",
+            culture_learning_enabled,
+        )
+        update_cultural_knowledge = kwargs.pop(
+            "update_cultural_knowledge",
+            culture_learning_enabled,
+        )
+
         # Create new agent
         agent = Agent(
             name=f"{thinking_direction.value.title()}AnalysisAgent",
@@ -551,12 +606,19 @@ class MultiThinkingAgentFactory:
             tools=capability.tools if capability.tools else None,
             instructions=capability.get_instructions(context, previous_results),
             markdown=True,
+            learning=learning_override,
+            db=db_override,
+            add_culture_to_context=add_culture_to_context,
+            update_cultural_knowledge=update_cultural_knowledge,
             **kwargs,
         )
 
         # Add special configuration
         if capability.memory_enabled:
-            agent.enable_user_memories = True
+            if hasattr(agent, "update_memory_on_run"):
+                agent.update_memory_on_run = True
+            else:
+                agent.enable_user_memories = True
 
         # Cache agent
         self._agent_cache[cache_key] = agent

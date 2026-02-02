@@ -76,111 +76,33 @@
 系统使用 **AI 驱动的复杂度分析** 来确定最优思考序列:
 
 ### 处理策略:
-1. **单智能体** (简单问题)
-   - 直接的事实或情感响应
-   - 针对直接查询的最快处理
+- **固定单一策略**: 所有请求都强制使用 `full_exploration`
+- **移除旧模式**: 不再支持单/双/三智能体路由分支
+- **保留复杂度分析**: 仅用于可观测性与诊断元数据
 
-2. **双智能体** (中等复杂度)
-   - 两步序列(例如,乐观 → 批判)
-   - 用于评估任务的平衡视角
-
-3. **三智能体** (核心思考)
-   - 事实 → 创意 → 综合
-   - 哲学和分析问题
-
-4. **完整序列** (复杂问题)
-   - 全部 6 个智能体协调工作
-   - 全面的多视角分析
-
-AI 分析器评估:
+AI 分析器仍然评估:
 - 问题复杂度和语义深度
 - 主要问题类型(事实、情感、创意、哲学等)
-- 最优解决方案所需的思维模式
-- 适当的模型选择(增强型 vs 标准型)
+- 所需思维模式(用于诊断)
+- 模型行为元数据(增强型 vs 标准型)
 
 ### AI 路由流程图
 
 ```mermaid
 flowchart TD
     A[输入思考] --> B[AI 复杂度分析器]
-
-    B --> C{问题分析}
-    C --> C1[复杂度评分<br/>0-100]
-    C --> C2[问题类型<br/>事实/情感/<br/>创意/哲学]
-    C --> C3[所需思维模式]
-
-    C1 --> D{路由决策}
-    C2 --> D
-    C3 --> D
-
-    D -->|评分: 0-25<br/>简单| E1[单智能体策略]
-    D -->|评分: 26-50<br/>中等| E2[双智能体策略]
-    D -->|评分: 51-75<br/>复杂| E3[三智能体策略]
-    D -->|评分: 76-100<br/>高度复杂| E4[完整序列策略]
-
-    %% 单智能体流程
-    E1 --> F1[事实智能体<br/>120秒 + ExaTools]
-    F1 --> G1[直接响应]
-
-    %% 双智能体流程 (完全并行)
-    E2 --> DA1[两个智能体并行运行]
-    DA1 --> DA2["智能体1 如乐观智能体<br/>120秒 + ExaTools"]
-    DA1 --> DA3["智能体2 如批判智能体<br/>120秒 + ExaTools"]
-    DA2 --> G2[程序综合<br/>合并两个并行结果]
-    DA3 --> G2
-
-    %% 三智能体流程 (完全并行)
-    E3 --> TA1[全部3个智能体并行运行]
-    TA1 --> TA2[事实智能体<br/>120秒 + ExaTools]
-    TA1 --> TA3[创意智能体<br/>240秒 + ExaTools]
-    TA1 --> TA4[批判智能体<br/>120秒 + ExaTools]
-    TA2 --> G3[程序综合<br/>整合全部3个结果]
-    TA3 --> G3
-    TA4 --> G3
-
-    %% 完整序列流程 (3步过程)
-    E4 --> FS1[步骤1: 初始综合<br/>60秒 增强模型<br/>初始编排]
-    FS1 --> FS2[步骤2: 并行执行<br/>5个智能体同时运行]
-
-    FS2 --> FS2A[事实智能体<br/>120秒 + ExaTools]
-    FS2 --> FS2B[情感智能体<br/>30秒 快速响应]
-    FS2 --> FS2C[乐观智能体<br/>120秒 + ExaTools]
-    FS2 --> FS2D[批判智能体<br/>120秒 + ExaTools]
-    FS2 --> FS2E[创意智能体<br/>240秒 + ExaTools]
-
-    FS2A --> FS3[步骤3: 最终综合<br/>60秒 增强模型<br/>整合所有并行结果]
-    FS2B --> FS3
-    FS2C --> FS3
-    FS2D --> FS3
-    FS2E --> FS3
-
-    FS3 --> G4[最终综合输出<br/>全面整合结果]
-
-    G1 --> H[下一次迭代或<br/>最终答案]
-    G2 --> H
-    G3 --> H
-    G4 --> H
-
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-    style C fill:#fff3e0
-    style D fill:#e8f5e8
-    style TA1 fill:#ffecb3
-    style FS2 fill:#ffecb3
-    style G1 fill:#fce4ec
-    style G2 fill:#fce4ec
-    style G3 fill:#fce4ec
-    style G4 fill:#fce4ec
-    style H fill:#f1f8e9
+    B --> C[记录复杂度元数据]
+    C --> D[固定策略: full_exploration]
+    D --> E[步骤1: 初始综合]
+    E --> F[步骤2: 并行专长智能体]
+    F --> G[步骤3: 最终综合]
+    G --> H[统一输出]
 ```
 
 **关键洞察:**
-- **并行执行**: 非综合智能体同时运行以实现最高效率
-- **综合整合**: 综合智能体串行处理并行结果
-- **两种处理类型**:
-  - **综合智能体**: 使用增强模型进行整合的真实AI智能体
-  - **程序综合**: 当没有综合智能体时的代码合并
-- **性能特点**: 并行处理同时优化速度和质量
+- **确定性行为**: 每个请求都执行同一条完整多步骤路径
+- **并行执行**: 非综合智能体仍并行运行
+- **综合整合**: 编排阶段与最终答复都由综合智能体完成
 
 ## 研究能力 (ExaTools 集成)
 
@@ -231,8 +153,8 @@ flowchart TD
 
 1.  **初始化：** 外部 LLM 使用 `sequentialthinking` 工具定义问题并启动过程。
 2.  **工具调用：** LLM 使用当前思考调用 `sequentialthinking` 工具，根据 `ThoughtData` 模型结构化。
-3.  **AI 复杂度分析：** 系统使用 AI 驱动的分析，基于问题复杂度和类型确定最优思考序列。
-4.  **智能体路由：** 基于分析，系统将思考路由到适当的思维智能体（单一、双重、三重或完整序列）。
+3.  **AI 复杂度分析：** 系统继续执行 AI 分析以记录复杂度与诊断元数据。
+4.  **固定策略执行：** 系统始终执行强制的 `full_exploration` 完整多步骤序列。
 5.  **并行处理：** 多个思维智能体从其专业视角同时处理思考：
    - 事实智能体收集客观数据（可选网络研究）
    - 批判智能体识别风险和问题
@@ -257,23 +179,45 @@ flowchart TD
 ### 参数:
 ```typescript
 {
-  thought: string,              // 当前思考步骤内容
-  thoughtNumber: number,         // 序列号 (≥1)
-  totalThoughts: number,         // 预估总步骤
-  nextThoughtNeeded: boolean,    // 是否需要另一步?
-  isRevision: boolean,           // 修订之前的思考?
-  branchFromThought?: number,    // 分支点(用于探索)
-  branchId?: string,             // 分支标识符
-  needsMoreThoughts: boolean     // 需要扩展序列?
+  thought: string,               // 单个聚焦的思考步骤
+  thoughtNumber: number,         // 1 起始序号，每次调用递增
+  totalThoughts: number,         // 当前计划总步数
+  nextThoughtNeeded: boolean,    // 中间步骤为 true，最终步骤为 false
+  isRevision: boolean,           // 仅在修订早前结论时设为 true
+  branchFromThought?: number,    // 与 branchId 成对使用，表示从某步分支
+  branchId?: string,             // 分支标识（分支时必填）
+  needsMoreThoughts: boolean     // 仅在超出 totalThoughts 时设为 true
 }
 ```
 
 ### 响应:
-返回来自多智能体系统的综合分析,包括:
-- 已处理的思考分析
-- 下一步指导
-- 分支和修订跟踪
-- 状态和元数据
+工具会同时返回:
+- `content`: 面向人的综合文本
+- `structuredContent`: 面向编排的结构化控制字段
+
+```typescript
+{
+  should_continue: boolean,      // 是否继续下一步调用
+  next_thought_number: number?,  // 推荐的下一步 thoughtNumber
+  stop_reason: string,           // 继续/停止/重试的原因码
+  current_thought_number: number,
+  total_thoughts: number,
+  next_call_arguments?: {        // 适用时给出的下一次调用参数建议
+    thoughtNumber: number,
+    totalThoughts: number,
+    nextThoughtNeeded: boolean,
+    needsMoreThoughts: boolean
+  },
+  parameter_usage: Record<string, string>
+}
+```
+
+### 调用契约（重要）
+- 将该工具视为**多步骤循环**，不要只调用一次。
+- 每次响应后读取 `structuredContent.should_continue`。
+- 当 `should_continue` 为 `true` 时继续调用 `sequentialthinking`。
+- 积极使用反思：当某一步存在缺陷或错误时，发送 `isRevision=true` 的修订步骤。
+- 构造下一次请求时，优先使用 `structuredContent.next_thought_number` 与 `next_call_arguments`。
 
 ## 安装
 
@@ -436,9 +380,9 @@ npx @modelcontextprotocol/inspector uv run mcp-server-mas-sequential-thinking
 
 ### 优势:
 - **多视角分析**: 6 种不同的认知方法
-- **AI 驱动路由**: 智能复杂度分析
+- **AI 驱动分析**: 复杂度元数据用于可观测性
 - **研究能力**: 4 个智能体带网络搜索(可选)
-- **灵活处理**: 从单一到完整序列策略
+- **确定性处理**: 固定完整多步骤策略
 - **模型优化**: 增强/标准模型选择
 - **提供商无关**: 支持多个 LLM 提供商
 

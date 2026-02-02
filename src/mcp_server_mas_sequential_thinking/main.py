@@ -6,11 +6,14 @@ import sys
 from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from enum import Enum
 from html import escape
+from typing import Annotated
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from pydantic import ValidationError
+from mcp.types import CallToolResult, TextContent
+from pydantic import BaseModel, Field, ValidationError
 
 from .config import ProcessingDefaults, SecurityConstants, ValidationLimits
 from .core import ThoughtProcessingError
@@ -202,7 +205,7 @@ def sequential_thinking_prompt(problem: str, context: str = "") -> list[dict]:
 Process Guidelines:
 1. Estimate appropriate number of total thoughts based on problem complexity
 2. Begin with: "Plan comprehensive analysis for: {problem}"
-3. Use revisions (isRevision=True) to improve previous thoughts
+3. Actively use revisions (isRevision=True) to reflect on and improve previous thoughts
 4. Use branching (branchFromThought, branchId) for alternative approaches
 5. Each thought should be detailed with clear reasoning
 6. Progress systematically through analysis phases
@@ -229,18 +232,322 @@ Ready to begin systematic analysis."""
     ]
 
 
-@mcp.tool()
+class StopReason(str, Enum):
+    """Reason code for continuing or stopping thought iteration."""
+
+    NEXT_THOUGHT_REQUIRED = "next_thought_required"
+    NEEDS_MORE_THOUGHTS = "needs_more_thoughts"
+    THOUGHT_SEQUENCE_COMPLETE = "thought_sequence_complete"
+    VALIDATION_ERROR = "validation_error"
+    PROCESSING_ERROR = "processing_error"
+    RATE_LIMITED = "rate_limited"
+    REQUEST_TOO_LARGE = "request_too_large"
+    UNEXPECTED_ERROR = "unexpected_error"
+
+
+class NextCallArguments(BaseModel):
+    """Recommended arguments for the next tool call."""
+
+    thoughtNumber: int = Field(
+        ...,
+        ge=ValidationLimits.MIN_THOUGHT_NUMBER,
+        description="Recommended thoughtNumber for the next tool call.",
+    )
+    totalThoughts: int = Field(
+        ...,
+        ge=1,
+        description="Recommended totalThoughts for the next tool call.",
+    )
+    nextThoughtNeeded: bool = Field(
+        ...,
+        description=(
+            "Set to true when another step should follow the next call. "
+            "Set to false on the final thought."
+        ),
+    )
+    needsMoreThoughts: bool = Field(
+        ...,
+        description=(
+            "Set to true only when you need to exceed totalThoughts and extend "
+            "the sequence."
+        ),
+    )
+
+
+class SequentialThinkingStructuredContent(BaseModel):
+    """Structured control fields returned on every tool response."""
+
+    should_continue: bool = Field(
+        ...,
+        description=(
+            "If true, call sequentialthinking again. The tool is designed for "
+            "multi-step reasoning loops."
+        ),
+    )
+    next_thought_number: int | None = Field(
+        None,
+        ge=ValidationLimits.MIN_THOUGHT_NUMBER,
+        description=(
+            "Recommended thoughtNumber for the next call. Null means no next "
+            "step is currently required."
+        ),
+    )
+    stop_reason: StopReason = Field(
+        ...,
+        description="Machine-readable reason that explains why to continue or stop.",
+    )
+    current_thought_number: int = Field(
+        ...,
+        ge=ValidationLimits.MIN_THOUGHT_NUMBER,
+        description="Echo of the current thoughtNumber after normalization.",
+    )
+    total_thoughts: int = Field(
+        ...,
+        ge=1,
+        description="Echo of current totalThoughts after normalization.",
+    )
+    next_call_arguments: NextCallArguments | None = Field(
+        None,
+        description=(
+            "Concrete argument recommendations for the next call when the "
+            "current run completes successfully and should continue."
+        ),
+    )
+    parameter_usage: dict[str, str] = Field(
+        ...,
+        description=(
+            "Contract reminders for each core parameter to keep multi-step "
+            "iterations consistent."
+        ),
+    )
+
+
+SEQUENTIALTHINKING_TOOL_DESCRIPTION = (
+    "Multi-step sequential reasoning contract.\n"
+    "Always treat this tool as iterative: after each response, read "
+    "structuredContent.should_continue and continue calling until it is false.\n"
+    "Actively use reflection: when a step reveals a flaw, explicitly send a "
+    "revision step with isRevision=true.\n"
+    "Input contract:\n"
+    "- thought: one concrete reasoning step in natural language.\n"
+    "- thoughtNumber: 1-based step index; increment by one for each new step.\n"
+    "- totalThoughts: target number of steps for the current plan.\n"
+    "- nextThoughtNeeded: true while the sequence should continue; false on final step.\n"
+    "- isRevision: true only when revising an earlier conclusion.\n"
+    "- branchFromThought + branchId: set together to explore an alternative branch.\n"
+    "- needsMoreThoughts: true only when extending beyond totalThoughts.\n"
+    "Output contract:\n"
+    "- structuredContent.should_continue: canonical continuation signal.\n"
+    "- structuredContent.next_thought_number: next recommended thoughtNumber.\n"
+    "- structuredContent.stop_reason: canonical reason code for orchestration."
+)
+
+
+def _build_parameter_usage_contract() -> dict[str, str]:
+    """Build immutable guidance text for input parameter usage."""
+    return {
+        "thought": "Send one focused reasoning step; avoid bundling multiple steps.",
+        "thoughtNumber": "Start from 1 and increase by 1 for each new thought.",
+        "totalThoughts": "Initial step budget; increase only with needsMoreThoughts=true.",
+        "nextThoughtNeeded": "Set true for intermediate steps and false for final step.",
+        "isRevision": (
+            "Actively use reflection: set true when correcting or refining an "
+            "earlier thought."
+        ),
+        "branchFromThought": "Set to a prior thought number when creating an alternative path.",
+        "branchId": "Required when branchFromThought is set; keep stable on that branch.",
+        "needsMoreThoughts": (
+            "Set true only when the current plan needs more steps than totalThoughts."
+        ),
+    }
+
+
+def _normalize_sequence_values(
+    thought_number: int, total_thoughts: int
+) -> tuple[int, int]:
+    """Normalize sequence counters so output schema remains valid."""
+    normalized_thought_number = max(
+        ValidationLimits.MIN_THOUGHT_NUMBER, thought_number
+    )
+    normalized_total_thoughts = max(1, total_thoughts, normalized_thought_number)
+    return normalized_thought_number, normalized_total_thoughts
+
+
+def _derive_progress_state(
+    thought_number: int,
+    total_thoughts: int,
+    next_thought_needed: bool,
+    needs_more_thoughts: bool,
+) -> tuple[bool, int | None, StopReason]:
+    """Derive loop-control signals for the MCP structured output."""
+    inferred_remaining_steps = thought_number < total_thoughts
+    should_continue = (
+        needs_more_thoughts
+        or next_thought_needed
+        or inferred_remaining_steps
+    )
+
+    if needs_more_thoughts:
+        return should_continue, thought_number + 1, StopReason.NEEDS_MORE_THOUGHTS
+    if should_continue:
+        return should_continue, thought_number + 1, StopReason.NEXT_THOUGHT_REQUIRED
+    return False, None, StopReason.THOUGHT_SEQUENCE_COMPLETE
+
+
+def _build_next_call_arguments(
+    should_continue: bool,
+    stop_reason: StopReason,
+    next_thought_number: int | None,
+    total_thoughts: int,
+) -> NextCallArguments | None:
+    """Build next call recommendations for successful multi-step progress."""
+    non_retry_reasons = {
+        StopReason.NEXT_THOUGHT_REQUIRED,
+        StopReason.NEEDS_MORE_THOUGHTS,
+    }
+    if (
+        not should_continue
+        or next_thought_number is None
+        or stop_reason not in non_retry_reasons
+    ):
+        return None
+
+    normalized_next = max(ValidationLimits.MIN_THOUGHT_NUMBER, next_thought_number)
+    normalized_total = max(1, total_thoughts, normalized_next)
+    needs_more_thoughts = (
+        stop_reason == StopReason.NEEDS_MORE_THOUGHTS
+        or normalized_next > total_thoughts
+    )
+
+    return NextCallArguments(
+        thoughtNumber=normalized_next,
+        totalThoughts=normalized_total,
+        nextThoughtNeeded=normalized_next < normalized_total or needs_more_thoughts,
+        needsMoreThoughts=needs_more_thoughts,
+    )
+
+
+def _build_call_result(
+    message: str,
+    thought_number: int,
+    total_thoughts: int,
+    should_continue: bool,
+    stop_reason: StopReason,
+    next_thought_number: int | None,
+    *,
+    is_error: bool = False,
+) -> CallToolResult:
+    """Build a CallToolResult with both text and structuredContent."""
+    normalized_thought_number, normalized_total_thoughts = _normalize_sequence_values(
+        thought_number, total_thoughts
+    )
+
+    if next_thought_number is None:
+        normalized_next_thought_number = None
+    else:
+        normalized_next_thought_number = max(
+            ValidationLimits.MIN_THOUGHT_NUMBER, next_thought_number
+        )
+
+    structured_content = SequentialThinkingStructuredContent(
+        should_continue=should_continue,
+        next_thought_number=normalized_next_thought_number,
+        stop_reason=stop_reason,
+        current_thought_number=normalized_thought_number,
+        total_thoughts=normalized_total_thoughts,
+        next_call_arguments=_build_next_call_arguments(
+            should_continue=should_continue,
+            stop_reason=stop_reason,
+            next_thought_number=normalized_next_thought_number,
+            total_thoughts=normalized_total_thoughts,
+        ),
+        parameter_usage=_build_parameter_usage_contract(),
+    )
+
+    return CallToolResult(
+        content=[TextContent(type="text", text=message)],
+        structuredContent=structured_content.model_dump(mode="json"),
+        isError=is_error,
+    )
+
+
+@mcp.tool(
+    description=SEQUENTIALTHINKING_TOOL_DESCRIPTION,
+    structured_output=True,
+)
 async def sequentialthinking(
-    thought: str,
-    thoughtNumber: int,
-    totalThoughts: int,
-    nextThoughtNeeded: bool,
-    isRevision: bool,
-    branchFromThought: int | None,
-    branchId: str | None,
-    needsMoreThoughts: bool,
-) -> str:
-    """Advanced sequential thinking tool with multi-agent coordination.
+    thought: Annotated[
+        str,
+        Field(
+            min_length=1,
+            description=(
+                "Current reasoning step text. Keep this to one concrete step."
+            ),
+        ),
+    ],
+    thoughtNumber: Annotated[
+        int,
+        Field(
+            ge=ValidationLimits.MIN_THOUGHT_NUMBER,
+            description=(
+                "1-based sequence index for this thought. Increment for each step."
+            ),
+        ),
+    ],
+    totalThoughts: Annotated[
+        int,
+        Field(
+            ge=1,
+            description=(
+                "Estimated total number of steps in the current reasoning plan."
+            ),
+        ),
+    ],
+    nextThoughtNeeded: Annotated[
+        bool,
+        Field(
+            description=(
+                "Set true when another thought follows this one. Set false on "
+                "the final thought."
+            ),
+        ),
+    ],
+    isRevision: Annotated[
+        bool,
+        Field(
+            description=(
+                "Set true only when this step revises an earlier conclusion."
+            ),
+        ),
+    ],
+    branchFromThought: Annotated[
+        int | None,
+        Field(
+            ge=ValidationLimits.MIN_THOUGHT_NUMBER,
+            description=(
+                "Original thought number for branching. Null for the main path."
+            ),
+        ),
+    ],
+    branchId: Annotated[
+        str | None,
+        Field(
+            min_length=1,
+            description=(
+                "Branch identifier. Required when branchFromThought is not null."
+            ),
+        ),
+    ],
+    needsMoreThoughts: Annotated[
+        bool,
+        Field(
+            description=(
+                "Set true only when you must continue beyond totalThoughts."
+            ),
+        ),
+    ],
+) -> Annotated[CallToolResult, SequentialThinkingStructuredContent]:
+    """Advanced multi-step sequential thinking tool.
 
     Processes thoughts through a specialized team of AI agents that coordinate
     to provide comprehensive analysis, planning, research, critique, and synthesis.
@@ -256,13 +563,19 @@ async def sequentialthinking(
         needsMoreThoughts: Whether more thoughts are needed beyond the initial estimate
 
     Returns:
-        Synthesized response from the multi-agent team with guidance for next steps
+        CallToolResult with:
+        - content: human-readable synthesis text
+        - structuredContent: continuation control contract for client loops
 
     Raises:
         ProcessingError: When thought processing fails
         ValidationError: When input validation fails
         RuntimeError: When server state is invalid
     """
+    normalized_thought_number, normalized_total_thoughts = _normalize_sequence_values(
+        thoughtNumber, totalThoughts
+    )
+
     # Apply rate limiting and DoS protection
     try:
         await _app_container.rate_limiter.check_rate_limit(client_id="mcp_client")
@@ -279,7 +592,15 @@ async def sequentialthinking(
         logger.warning(
             f"Rate limit exceeded for thought #{thoughtNumber}: {e.limit_type}"
         )
-        return error_msg
+        return _build_call_result(
+            message=error_msg,
+            thought_number=normalized_thought_number,
+            total_thoughts=normalized_total_thoughts,
+            should_continue=True,
+            stop_reason=StopReason.RATE_LIMITED,
+            next_thought_number=normalized_thought_number,
+            is_error=True,
+        )
     except ValueError as e:
         # Request size validation error
         error_msg = (
@@ -292,7 +613,15 @@ async def sequentialthinking(
         logger.warning(
             f"Request size validation failed for thought #{thoughtNumber}: {e}"
         )
-        return error_msg
+        return _build_call_result(
+            message=error_msg,
+            thought_number=normalized_thought_number,
+            total_thoughts=normalized_total_thoughts,
+            should_continue=True,
+            stop_reason=StopReason.REQUEST_TOO_LARGE,
+            next_thought_number=normalized_thought_number,
+            is_error=True,
+        )
 
     try:
         # Create and validate thought data using refactored function
@@ -311,32 +640,70 @@ async def sequentialthinking(
         thought_processor = await _app_container.get_thought_processor()
         result = await thought_processor.process_thought(thought_data)
 
-        logger.info(f"Successfully processed thought #{thoughtNumber}")
-        return result
+        should_continue, next_thought_number, stop_reason = _derive_progress_state(
+            thought_number=thought_data.thoughtNumber,
+            total_thoughts=thought_data.totalThoughts,
+            next_thought_needed=thought_data.nextThoughtNeeded,
+            needs_more_thoughts=thought_data.needsMoreThoughts,
+        )
 
-    except ValidationError as e:
+        logger.info(f"Successfully processed thought #{thoughtNumber}")
+        return _build_call_result(
+            message=result,
+            thought_number=thought_data.thoughtNumber,
+            total_thoughts=thought_data.totalThoughts,
+            should_continue=should_continue,
+            stop_reason=stop_reason,
+            next_thought_number=next_thought_number,
+        )
+
+    except (ValidationError, ValueError) as e:
         error_msg = f"Input validation failed for thought #{thoughtNumber}: {e}"
         logger.exception(error_msg)
-        return _format_validation_error(e, thoughtNumber)
+        return _build_call_result(
+            message=_format_validation_error(e, thoughtNumber),
+            thought_number=normalized_thought_number,
+            total_thoughts=normalized_total_thoughts,
+            should_continue=True,
+            stop_reason=StopReason.VALIDATION_ERROR,
+            next_thought_number=normalized_thought_number,
+            is_error=True,
+        )
 
     except ThoughtProcessingError as e:
         error_msg = f"Processing failed for thought #{thoughtNumber}: {e}"
         logger.exception(error_msg)
         if hasattr(e, "metadata") and e.metadata:
             logger.exception(f"Error metadata: {e.metadata}")
-        return _format_processing_error(e, thoughtNumber)
+        return _build_call_result(
+            message=_format_processing_error(e, thoughtNumber),
+            thought_number=normalized_thought_number,
+            total_thoughts=normalized_total_thoughts,
+            should_continue=True,
+            stop_reason=StopReason.PROCESSING_ERROR,
+            next_thought_number=normalized_thought_number,
+            is_error=True,
+        )
 
     except Exception as e:
         error_msg = f"Unexpected error processing thought #{thoughtNumber}: {e}"
         logger.exception(error_msg)
-        return _format_unexpected_error(e, thoughtNumber)
+        return _build_call_result(
+            message=_format_unexpected_error(e, thoughtNumber),
+            thought_number=normalized_thought_number,
+            total_thoughts=normalized_total_thoughts,
+            should_continue=True,
+            stop_reason=StopReason.UNEXPECTED_ERROR,
+            next_thought_number=normalized_thought_number,
+            is_error=True,
+        )
 
     finally:
         # Always release concurrent request slot
         await _app_container.rate_limiter.release_concurrent_slot()
 
 
-def _format_validation_error(error: ValidationError, thought_number: int) -> str:
+def _format_validation_error(error: Exception, thought_number: int) -> str:
     """Format validation error with actionable guidance."""
     error_str = str(error)
 

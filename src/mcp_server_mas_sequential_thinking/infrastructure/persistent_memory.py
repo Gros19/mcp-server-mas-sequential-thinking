@@ -3,6 +3,7 @@
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -103,14 +104,18 @@ class ThoughtRecord(Base):
 
     def to_thought_data(self) -> ThoughtData:
         """Convert database record to ThoughtData model."""
+        branch_from_thought = (
+            int(self.branch_from) if self.branch_from is not None else None
+        )
+        branch_id = str(self.branch_id) if self.branch_id is not None else None
         return ThoughtData(
             thought=str(self.thought),
             thoughtNumber=int(self.thought_number),
             totalThoughts=int(self.total_thoughts),
             nextThoughtNeeded=bool(self.next_needed),
             isRevision=False,  # Assuming default value is intentional
-            branchFromThought=self.branch_from,
-            branchId=self.branch_id,
+            branchFromThought=branch_from_thought,
+            branchId=branch_id,
             needsMoreThoughts=True,  # Assuming default value is intentional
         )
 
@@ -247,6 +252,9 @@ class PersistentMemoryManager:
                 db.query(SessionRecord).filter(SessionRecord.id == session_id).first()
             )
 
+        if session_record is None:
+            raise RuntimeError(f"Failed to create session record for {session_id}")
+
         return session_record
 
     def _create_thought_record(
@@ -297,11 +305,10 @@ class PersistentMemoryManager:
         self, session_record: SessionRecord, processing_metadata: dict | None
     ) -> None:
         """Update session statistics."""
-        if session_record:
-            session_record.totalThoughts += 1  # type: ignore[assignment]
-            session_record.updated_at = datetime.utcnow()  # type: ignore[assignment]
-            if processing_metadata and processing_metadata.get("actual_cost"):
-                session_record.total_cost += float(processing_metadata["actual_cost"])  # type: ignore[assignment]
+        session_record.total_thoughts += 1  # type: ignore[assignment]
+        session_record.updated_at = datetime.utcnow()  # type: ignore[assignment]
+        if processing_metadata and processing_metadata.get("actual_cost"):
+            session_record.total_cost += float(processing_metadata["actual_cost"])  # type: ignore[assignment]
 
     def _handle_branching(
         self, db: Session, session_id: str, thought_data: ThoughtData
@@ -314,7 +321,7 @@ class PersistentMemoryManager:
             db.query(BranchRecord)
             .filter(
                 BranchRecord.session_id == session_id,
-                BranchRecord.branchId == thought_data.branchId,
+                BranchRecord.branch_id == thought_data.branchId,
             )
             .first()
         )
@@ -337,7 +344,7 @@ class PersistentMemoryManager:
             query = (
                 db.query(ThoughtRecord)
                 .filter(ThoughtRecord.session_id == session_id)
-                .order_by(ThoughtRecord.thoughtNumber)
+                .order_by(ThoughtRecord.thought_number)
             )
 
             if limit:
@@ -354,7 +361,7 @@ class PersistentMemoryManager:
                 db.query(ThoughtRecord)
                 .filter(
                     ThoughtRecord.session_id == session_id,
-                    ThoughtRecord.thoughtNumber == thought_number,
+                    ThoughtRecord.thought_number == thought_number,
                 )
                 .first()
             )
@@ -368,9 +375,9 @@ class PersistentMemoryManager:
                 db.query(ThoughtRecord)
                 .filter(
                     ThoughtRecord.session_id == session_id,
-                    ThoughtRecord.branchId == branch_id,
+                    ThoughtRecord.branch_id == branch_id,
                 )
-                .order_by(ThoughtRecord.thoughtNumber)
+                .order_by(ThoughtRecord.thought_number)
                 .all()
             )
 
@@ -430,14 +437,16 @@ class PersistentMemoryManager:
             ) / max(total_thoughts, 1)
 
             # Strategy breakdown
-            strategy_stats = {}
+            strategy_stats: dict[str, dict[str, Any]] = {}
             for thought in thought_stats:
-                strategy = thought.processing_strategy or "unknown"
+                strategy = str(thought.processing_strategy or "unknown")
                 if strategy not in strategy_stats:
-                    strategy_stats[strategy] = {"count": 0, "cost": 0, "tokens": 0}
+                    strategy_stats[strategy] = {"count": 0, "cost": 0.0, "tokens": 0}
+                actual_cost = float(thought.actual_cost or 0.0)
+                token_usage = int(thought.token_usage or 0)
                 strategy_stats[strategy]["count"] += 1
-                strategy_stats[strategy]["cost"] += thought.actual_cost or 0
-                strategy_stats[strategy]["tokens"] += thought.token_usage or 0
+                strategy_stats[strategy]["cost"] += actual_cost
+                strategy_stats[strategy]["tokens"] += token_usage
 
             return {
                 "period_days": days_back,

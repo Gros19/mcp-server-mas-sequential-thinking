@@ -10,7 +10,6 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from agno.workflow.router import Router
 from agno.workflow.step import Step
 from agno.workflow.types import StepInput, StepOutput
 from agno.workflow.workflow import Workflow
@@ -22,6 +21,9 @@ from mcp_server_mas_sequential_thinking.core.models import ThoughtData
 from mcp_server_mas_sequential_thinking.processors.multi_thinking_processor import (
     MultiThinkingSequentialProcessor,
     create_multi_thinking_step_output,
+)
+from mcp_server_mas_sequential_thinking.routing.ai_complexity_analyzer import (
+    AIComplexityAnalyzer,
 )
 from mcp_server_mas_sequential_thinking.routing.workflow_state import (
     MultiThinkingState,
@@ -49,24 +51,22 @@ class MultiThinkingWorkflowRouter:
     def __init__(self) -> None:
         """Initialize Multi-Thinking workflow router."""
         self.model_config = get_model_config()
+        self.complexity_analyzer = AIComplexityAnalyzer(self.model_config)
 
         # Initialize Multi-Thinking processor
         self.multi_thinking_processor = MultiThinkingSequentialProcessor()
 
-        # Create Multi-Thinking processing step
-        self.multi_thinking_step = self._create_multi_thinking_step()
-
-        # Create router that always selects Multi-Thinking
-        self.router = Router(
-            name="multi_thinking_router",
-            selector=self._multi_thinking_selector,
-            choices=[self.multi_thinking_step],
+        # Create workflow steps
+        self.complexity_analysis_step = self._create_complexity_analysis_step()
+        self.full_thinking_step = self._create_multi_thinking_step(
+            step_name="full_sequence",
+            forced_strategy_name="full_exploration",
         )
 
         # Create main workflow
         self.workflow = Workflow(
             name="multi_thinking_workflow",
-            steps=[self.router],
+            steps=[self.complexity_analysis_step, self.full_thinking_step],
         )
 
         logger.info("Multi-Thinking Workflow Router initialized")
@@ -114,37 +114,85 @@ class MultiThinkingWorkflowRouter:
         if state.start_time is not None:
             session_state["start_time"] = state.start_time
 
-    def _multi_thinking_selector(self, step_input: StepInput) -> list[Step]:
-        """Selector that always returns Multi-Thinking processing."""
-        try:
-            logger.info("🎩 MULTI-THINKING WORKFLOW ROUTING:")
+    def _create_complexity_analysis_step(self) -> Step:
+        """Create AI complexity analysis step."""
 
-            # Extract thought content for logging
-            if isinstance(step_input.input, dict):
-                thought_content = step_input.input.get("thought", "")
-                thought_number = step_input.input.get("thought_number", 1)
-                total_thoughts = step_input.input.get("total_thoughts", 1)
-            else:
-                thought_content = str(step_input.input)
-                thought_number = 1
-                total_thoughts = 1
+        async def complexity_executor(
+            step_input: StepInput, session_state: dict[str, Any]
+        ) -> StepOutput:
+            try:
+                logger.info("🧠 COMPLEXITY ANALYSIS STEP:")
 
-            logger.info(
-                "  📝 Input: %s%s",
-                thought_content[:100],
-                "..." if len(thought_content) > 100 else "",
-            )
-            logger.info("  🔢 Progress: %s/%s", thought_number, total_thoughts)
-            logger.info("  ✅ Multi-Thinking selected - exclusive thinking methodology")
+                if isinstance(step_input.input, dict):
+                    thought_content = step_input.input.get(
+                        "thought", str(step_input.input)
+                    )
+                    thought_number = step_input.input.get("thought_number", 1)
+                    total_thoughts = step_input.input.get("total_thoughts", 1)
+                    is_revision = step_input.input.get("isRevision", False)
+                    branch_from_thought = step_input.input.get("branchFromThought")
+                    branch_id = step_input.input.get("branchId")
+                    needs_more_thoughts = step_input.input.get(
+                        "needsMoreThoughts", False
+                    )
+                    next_thought_needed = step_input.input.get(
+                        "nextThoughtNeeded", True
+                    )
+                else:
+                    thought_content = str(step_input.input)
+                    thought_number = 1
+                    total_thoughts = 1
+                    is_revision = False
+                    branch_from_thought = None
+                    branch_id = None
+                    needs_more_thoughts = False
+                    next_thought_needed = True
 
-            return [self.multi_thinking_step]
+                thought_data = ThoughtData(
+                    thought=thought_content,
+                    thoughtNumber=thought_number,
+                    totalThoughts=total_thoughts,
+                    nextThoughtNeeded=next_thought_needed,
+                    isRevision=is_revision,
+                    branchFromThought=branch_from_thought,
+                    branchId=branch_id,
+                    needsMoreThoughts=needs_more_thoughts,
+                )
 
-        except Exception as e:
-            logger.exception("Error in Multi-Thinking selector: %s", e)
-            logger.warning("Continuing with Multi-Thinking processing despite error")
-            return [self.multi_thinking_step]
+                metrics = await self.complexity_analyzer.analyze(thought_data)
+                session_state["current_complexity_score"] = metrics.complexity_score
+                session_state["complexity_metrics"] = metrics
+                session_state["complexity_score_scale"] = 100.0
 
-    def _create_multi_thinking_step(self) -> Step:
+                logger.info(
+                    "  ✅ Complexity analyzed: %.1f",
+                    metrics.complexity_score,
+                )
+
+                return StepOutput(
+                    content="Complexity analysis completed.",
+                    success=True,
+                    step_name="complexity_analysis",
+                )
+            except Exception as exc:
+                logger.exception("  ❌ Complexity analysis failed")
+                return StepOutput(
+                    content=f"Complexity analysis failed: {exc!s}",
+                    success=False,
+                    error=str(exc),
+                    step_name="complexity_analysis_error",
+                )
+
+        executor: Any = complexity_executor
+        return Step(
+            name="complexity_analysis",
+            executor=executor,
+            description="AI complexity analysis for observability metadata",
+        )
+
+    def _create_multi_thinking_step(
+        self, step_name: str, forced_strategy_name: str | None
+    ) -> Step:
         """Create Six Thinking Hats processing step."""
 
         async def multi_thinking_executor(
@@ -210,10 +258,16 @@ class MultiThinkingWorkflowRouter:
                 logger.info("  📝 Input: %s...", thought_content[:100])
                 logger.info("  🔢 Thought: %s/%s", thought_number, total_thoughts)
 
+                complexity_metrics = session_state.get("complexity_metrics")
+
                 # Process with Multi-Thinking
                 result = (
                     await self.multi_thinking_processor.process_with_multi_thinking(
-                        thought_data, context
+                        thought_data,
+                        context,
+                        state=state,
+                        forced_strategy_name=forced_strategy_name,
+                        complexity_metrics=complexity_metrics,
                     )
                 )
 
@@ -246,12 +300,13 @@ class MultiThinkingWorkflowRouter:
                     content=f"Multi-Thinking processing failed: {e!s}",
                     success=False,
                     error=str(e),
-                    step_name="multi_thinking_error",
+                    step_name=f"{step_name}_error",
                 )
 
+        executor: Any = multi_thinking_executor
         return Step(
-            name="multi_thinking_processing",
-            executor=multi_thinking_executor,
+            name=step_name,
+            executor=executor,
             description="Six Thinking Hats sequential processing",
         )
 

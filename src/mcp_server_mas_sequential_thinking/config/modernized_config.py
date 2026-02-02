@@ -3,18 +3,28 @@
 Clean configuration management with modern Python patterns.
 """
 
+import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
-from agno.models.anthropic import Claude
 from agno.models.base import Model
 from agno.models.deepseek import DeepSeek
 from agno.models.groq import Groq
 from agno.models.ollama import Ollama
 from agno.models.openai import OpenAIChat
 from agno.models.openrouter import OpenRouter
+
+try:
+    from agno.models.anthropic import Claude as _ClaudeModel
+
+    ClaudeModel: type[Model] | None = _ClaudeModel
+    _CLAUDE_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - optional provider
+    ClaudeModel = None
+    _CLAUDE_IMPORT_ERROR = exc
 
 
 class GitHubOpenAI(OpenAIChat):
@@ -114,7 +124,7 @@ class ModelConfig:
     def create_enhanced_model(self) -> Model:
         """Create enhanced model instance (used for complex synthesis like Blue Hat)."""
         # Enable prompt caching for Anthropic models
-        if self.provider_class == Claude:
+        if ClaudeModel is not None and self.provider_class == ClaudeModel:
             return self.provider_class(
                 id=self.enhanced_model_id,
                 # Note: cache_system_prompt removed - not available in current Agno version
@@ -124,7 +134,7 @@ class ModelConfig:
     def create_standard_model(self) -> Model:
         """Create standard model instance (used for individual hat processing)."""
         # Enable prompt caching for Anthropic models
-        if self.provider_class == Claude:
+        if ClaudeModel is not None and self.provider_class == ClaudeModel:
             return self.provider_class(
                 id=self.standard_model_id,
                 # Note: cache_system_prompt removed - not available in current Agno version
@@ -274,7 +284,12 @@ class AnthropicStrategy(BaseProviderStrategy):
 
     @property
     def provider_class(self) -> type[Model]:
-        return Claude
+        if ClaudeModel is None:
+            raise ImportError(
+                "Anthropic provider unavailable. Install a compatible "
+                "`anthropic` package to enable Claude models."
+            ) from _CLAUDE_IMPORT_ERROR
+        return ClaudeModel
 
     @property
     def default_enhanced_model(self) -> str:
@@ -293,7 +308,7 @@ class ConfigurationManager:
     """Manages configuration strategies with dependency injection."""
 
     def __init__(self) -> None:
-        self._strategies = {
+        self._strategies: dict[str, ConfigurationStrategy] = {
             "deepseek": DeepSeekStrategy(),
             "groq": GroqStrategy(),
             "openrouter": OpenRouterStrategy(),
@@ -355,8 +370,6 @@ class ConfigurationManager:
         # Check EXA API key for research functionality (optional)
         exa_key = os.environ.get("EXA_API_KEY", "").strip()
         if not exa_key:
-            import logging
-
             logging.getLogger(__name__).warning(
                 "EXA_API_KEY not found. Research tools will be disabled."
             )
@@ -404,8 +417,6 @@ class ConfigurationManager:
             )
 
         # Character validation - API keys should be alphanumeric with some special chars
-        import re
-
         if not re.match(r"^[a-zA-Z0-9._-]+$", key_value):
             raise ValueError(
                 f"{key_name} contains invalid characters. API keys should only contain letters, numbers, dots, hyphens, and underscores."
@@ -423,11 +434,11 @@ class ConfigurationManager:
         """Validate GitHub token format (delegated to GitHubOpenAI class)."""
         try:
             GitHubOpenAI._validate_github_token(token)
-        except ValueError:
+        except ValueError as exc:
             # Re-raise with less technical message for general validation
             raise ValueError(
                 "Invalid GitHub token format. Please ensure you're using a valid GitHub personal access token."
-            )
+            ) from exc
 
     def _validate_anthropic_key_format(self, key: str) -> None:
         """Validate Anthropic API key format."""

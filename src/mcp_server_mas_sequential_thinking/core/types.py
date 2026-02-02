@@ -60,7 +60,7 @@ class CoordinationPlan:
 
     @classmethod
     def from_routing_decision(
-        cls, routing_decision: dict[str, Any], thought_data: ThoughtData
+        cls, routing_decision: Any, thought_data: ThoughtData
     ) -> CoordinationPlan:
         """Create coordination plan from adaptive routing decision."""
         # Map ProcessingStrategy to ExecutionMode
@@ -84,17 +84,18 @@ class CoordinationPlan:
             ],
         }
 
-        execution_mode = strategy_to_mode.get(
-            routing_decision.strategy.value, ExecutionMode.SINGLE_AGENT
-        )
-        specialists = complexity_to_specialists.get(
-            routing_decision.complexity_level.value, ["general"]
-        )
+        strategy_value = cls._routing_value(routing_decision, "strategy")
+        complexity_level_value = cls._routing_value(routing_decision, "complexity_level")
+        complexity_score = float(cls._routing_value(routing_decision, "complexity_score"))
+        reasoning = str(cls._routing_value(routing_decision, "reasoning"))
+
+        execution_mode = strategy_to_mode.get(strategy_value, ExecutionMode.SINGLE_AGENT)
+        specialists = complexity_to_specialists.get(complexity_level_value, ["general"])
 
         return cls(
-            strategy=routing_decision.strategy.value,
-            complexity_level=routing_decision.complexity_level.value,
-            complexity_score=routing_decision.complexity_score,
+            strategy=strategy_value,
+            complexity_level=complexity_level_value,
+            complexity_score=complexity_score,
             execution_mode=execution_mode,
             specialist_roles=specialists,
             team_size=len(specialists),
@@ -105,10 +106,19 @@ class CoordinationPlan:
             ],
             expected_interactions=len(specialists),
             timeout_seconds=300.0,  # Default timeout
-            reasoning=routing_decision.reasoning,
+            reasoning=reasoning,
             confidence=0.8,  # Default confidence for rule-based routing
             original_thought=thought_data.thought,
         )
+
+    @staticmethod
+    def _routing_value(routing_decision: Any, key: str) -> Any:
+        """Read routing fields from either an object or a mapping."""
+        if isinstance(routing_decision, dict):
+            value = routing_decision[key]
+        else:
+            value = getattr(routing_decision, key)
+        return getattr(value, "value", value)
 
 
 class ProcessingMetadata(TypedDict, total=False):
