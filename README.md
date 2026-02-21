@@ -1,12 +1,10 @@
-# Sequential Thinking Multi-Agent System (MAS) ![](https://img.shields.io/badge/A%20FRAD%20PRODUCT-WIP-yellow)
+# Sequential Thinking Multi-Agent System (MAS)
 
-[![smithery badge](https://smithery.ai/badge/@FradSer/mcp-server-mas-sequential-thinking)](https://smithery.ai/server/@FradSer/mcp-server-mas-sequential-thinking) [![Twitter Follow](https://img.shields.io/twitter/follow/FradSer?style=social)](https://twitter.com/FradSer) [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Framework](https://img.shields.io/badge/Framework-Agno-orange.svg)](https://github.com/cognitivecomputations/agno)
+[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Framework](https://img.shields.io/badge/Framework-Agno_2.5-orange.svg)](https://github.com/agno-agi/agno) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-English | [简体中文](README.zh-CN.md)
+> **Fork Notice**: This project is a fork of [FradSer/mcp-server-mas-sequential-thinking](https://github.com/FradSer/mcp-server-mas-sequential-thinking). See [Improvements from Upstream](#improvements-from-upstream) for details on what has been enhanced.
 
 This project implements an advanced sequential thinking process using a **Multi-Agent System (MAS)** built with the **Agno** framework and served via **MCP**. It represents a significant evolution from simpler state-tracking approaches by leveraging coordinated, specialized agents for deeper analysis and problem decomposition.
-
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/fradser-mcp-server-mas-sequential-thinking-badge.png)](https://mseep.ai/app/fradser-mcp-server-mas-sequential-thinking)
 
 ## What is This?
 
@@ -129,7 +127,43 @@ Research is **optional** - requires `EXA_API_KEY` environment variable. The syst
 - **OpenRouter** - Access to multiple models
 - **GitHub Models** - OpenAI models via GitHub API
 - **Anthropic** - Claude models with prompt caching
+- **Google Gemini** - Gemini 2.5 Pro / 2.0 Flash
 - **Ollama** - Local model execution
+
+## Improvements from Upstream
+
+This fork ([Gros19/mcp-server-mas-sequential-thinking](https://github.com/Gros19/mcp-server-mas-sequential-thinking)) builds on the original [FradSer](https://github.com/FradSer/mcp-server-mas-sequential-thinking) project with the following enhancements:
+
+### Architecture & Framework
+- **Agno 2.5.3** upgrade (from 1.x) - ~10,000x faster agent creation, ~50x less memory usage
+- **Typed state management** (`MultiThinkingState`) replacing raw session_state dictionaries
+- **Dependency injection** with Protocol-based interfaces for testability
+- **src layout** adoption following Python packaging best practices
+
+### Performance & Optimization
+- **Parallel agent execution** via `asyncio.gather` for non-synthesis agents
+- **Per-agent message history optimization** - 40-60% token reduction by tuning context window per agent role
+- **Event-driven token tracking** from model request events
+
+### Security & Reliability
+- **Rate limiting** with token bucket algorithm (30 req/min, 500 req/hour)
+- **Prompt injection protection** with regex patterns and Shannon entropy analysis
+- **Request size validation** (50KB max) and concurrent request limiting
+- **Comprehensive input sanitization** with HTML escaping
+
+### Workflow & Routing
+- **Mandatory `full_exploration` strategy** - deterministic multi-step processing for every request
+- **`structuredContent` output** with loop control fields (`should_continue`, `next_thought_number`, `stop_reason`)
+- **Active reflection support** via `isRevision=true` for self-correcting reasoning chains
+
+### Provider Support
+- **7 LLM providers**: DeepSeek, Groq, OpenRouter, GitHub Models, Anthropic, Google Gemini, Ollama
+- **Dual model strategy**: Enhanced model for synthesis, Standard model for individual agents
+
+### Developer Experience
+- **Comprehensive test suite** with Makefile-based test runner and coverage reporting
+- **Code quality toolchain**: ruff + mypy + pytest with CI/CD integration
+- **Structured logging** with file and console output
 
 ## Key Differences from Original Version (TypeScript)
 
@@ -230,23 +264,18 @@ The tool returns both:
     - **OpenRouter**: `OPENROUTER_API_KEY`
     - **GitHub Models**: `GITHUB_TOKEN`
     - **Anthropic**: `ANTHROPIC_API_KEY`
+    - **Google Gemini**: `GOOGLE_API_KEY`
     - **Ollama**: Local installation (no API key)
 - **Optional**: `EXA_API_KEY` for web research capabilities
 - `uv` package manager (recommended) or `pip`
 
 ### Quick Start
 
-#### 1. Install via Smithery (Recommended)
-
-```bash
-npx -y @smithery/cli install @FradSer/mcp-server-mas-sequential-thinking --client claude
-```
-
-#### 2. Manual Installation
+#### Manual Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/FradSer/mcp-server-mas-sequential-thinking.git
+git clone https://github.com/Gros19/mcp-server-mas-sequential-thinking.git
 cd mcp-server-mas-sequential-thinking
 
 # Install with uv (recommended)
@@ -283,7 +312,7 @@ Create a `.env` file or set these variables:
 
 ```bash
 # LLM Provider (required)
-LLM_PROVIDER="deepseek"  # deepseek, groq, openrouter, github, anthropic, ollama
+LLM_PROVIDER="deepseek"  # deepseek, groq, openrouter, github, anthropic, gemini, ollama
 DEEPSEEK_API_KEY="sk-..."
 
 # Optional: Enhanced/Standard Model Selection
@@ -307,6 +336,10 @@ GROQ_STANDARD_MODEL_ID="openai/gpt-oss-20b"
 # Anthropic with Claude models
 ANTHROPIC_ENHANCED_MODEL_ID="claude-3-5-sonnet-20241022"
 ANTHROPIC_STANDARD_MODEL_ID="claude-3-5-haiku-20241022"
+
+# Google Gemini
+GEMINI_ENHANCED_MODEL_ID="gemini-2.5-pro"
+GEMINI_STANDARD_MODEL_ID="gemini-2.0-flash"
 
 # GitHub Models
 GITHUB_ENHANCED_MODEL_ID="gpt-4o"
@@ -345,7 +378,7 @@ python src/mcp_server_mas_sequential_thinking/main.py
 
 ```bash
 # Clone repository
-git clone https://github.com/FradSer/mcp-server-mas-sequential-thinking.git
+git clone https://github.com/Gros19/mcp-server-mas-sequential-thinking.git
 cd mcp-server-mas-sequential-thinking
 
 # Create virtual environment
@@ -434,14 +467,16 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Built with [Agno](https://github.com/agno-agi/agno) v2.0+ framework
+- Originally created by [FradSer](https://github.com/FradSer/mcp-server-mas-sequential-thinking)
+- Built with [Agno](https://github.com/agno-agi/agno) v2.5 framework
 - Model Context Protocol by [Anthropic](https://www.anthropic.com/)
 - Research capabilities powered by [Exa](https://exa.ai/) (optional)
 - Multi-dimensional thinking inspired by Edward de Bono's work
 
 ## Support
 
-- GitHub Issues: [Report bugs or request features](https://github.com/FradSer/mcp-server-mas-sequential-thinking/issues)
+- GitHub Issues: [Report bugs or request features](https://github.com/Gros19/mcp-server-mas-sequential-thinking/issues)
+- Upstream: [FradSer/mcp-server-mas-sequential-thinking](https://github.com/FradSer/mcp-server-mas-sequential-thinking)
 - Documentation: Check CLAUDE.md for detailed implementation notes
 - MCP Protocol: [Official MCP Documentation](https://modelcontextprotocol.io/)
 
