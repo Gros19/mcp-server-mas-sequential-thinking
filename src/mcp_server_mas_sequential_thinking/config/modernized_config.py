@@ -26,6 +26,15 @@ except Exception as exc:  # pragma: no cover - optional provider
     ClaudeModel = None
     _CLAUDE_IMPORT_ERROR = exc
 
+try:
+    from agno.models.google import Gemini as _GeminiModel
+
+    GeminiModel: type[Model] | None = _GeminiModel
+    _GEMINI_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - optional provider
+    GeminiModel = None
+    _GEMINI_IMPORT_ERROR = exc
+
 
 class GitHubOpenAI(OpenAIChat):
     """OpenAI provider configured for GitHub Models API with enhanced validation."""
@@ -304,6 +313,31 @@ class AnthropicStrategy(BaseProviderStrategy):
         return "ANTHROPIC_API_KEY"
 
 
+class GeminiStrategy(BaseProviderStrategy):
+    """Google Gemini provider strategy."""
+
+    @property
+    def provider_class(self) -> type[Model]:
+        if GeminiModel is None:
+            raise ImportError(
+                "Gemini provider unavailable. Install a compatible "
+                "`google-genai` package to enable Gemini models."
+            ) from _GEMINI_IMPORT_ERROR
+        return GeminiModel
+
+    @property
+    def default_enhanced_model(self) -> str:
+        return "gemini-2.5-pro"
+
+    @property
+    def default_standard_model(self) -> str:
+        return "gemini-2.0-flash"
+
+    @property
+    def api_key_name(self) -> str:
+        return "GOOGLE_API_KEY"
+
+
 class ConfigurationManager:
     """Manages configuration strategies with dependency injection."""
 
@@ -315,6 +349,7 @@ class ConfigurationManager:
             "ollama": OllamaStrategy(),
             "github": GitHubStrategy(),
             "anthropic": AnthropicStrategy(),
+            "gemini": GeminiStrategy(),
         }
         self._default_strategy = "deepseek"
 

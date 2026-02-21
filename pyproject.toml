@@ -9,7 +9,7 @@ authors = [
     { name = "Alain Ivars", email = "alainivars@gmail.com" },
 ]
 dependencies = [
-    "agno>=2.4.7",
+    "agno>=2.5.3",
     "asyncio",
     "exa-py>=2.0.0",
     "python-dotenv>=1.2.1",
@@ -19,7 +19,8 @@ dependencies = [
     "openrouter",
     "httpx[socks]>=0.28.1",
     "sqlalchemy>=2.0.44",
-    "anthropic>=0.72.1",
+    "anthropic>=0.80.0",
+    "google-genai>=1.52.0",
     "fastapi>=0.115.0",
 ]
 

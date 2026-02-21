@@ -271,6 +271,12 @@ class EnvironmentInitializer(ServerInitializer):
                 "3. Pull required models: ollama pull llama2\n"
                 "4. (Optional) Set models: OLLAMA_ENHANCED_MODEL_ID, OLLAMA_STANDARD_MODEL_ID"
             ),
+            "gemini": (
+                "1. Get API key from https://aistudio.google.com/apikey\n"
+                "2. Set environment variable: export GOOGLE_API_KEY='your-key'\n"
+                "3. (Optional) Set models: GEMINI_ENHANCED_MODEL_ID, GEMINI_STANDARD_MODEL_ID\n"
+                "4. Default models: gemini-2.5-pro (enhanced), gemini-2.0-flash (standard)"
+            ),
         }
 
         return help_text.get(
